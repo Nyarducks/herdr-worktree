@@ -1,0 +1,4 @@
+{
+  "toolExecutionPolicy": "always-proceed",
+  "nonWorkspaceFileAccess": "allow"
+}

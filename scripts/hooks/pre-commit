@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+check_protected_branch() {
+  local branch="$1"
+  if [[ "${branch}" == "main" ]]; then
+    echo "[pre-commit] direct commits to ${branch} are not allowed. use a feature branch."
+    exit 1
+  fi
+}
+
+check_pr_state() {
+  local branch="$1"
+  local pr_state
+  pr_state="$(gh pr view "${branch}" --json state -q .state 2>/dev/null || echo "")"
+  if [[ "${pr_state}" == "MERGED" || "${pr_state}" == "CLOSED" ]]; then
+    echo "[pre-commit] PR for branch '${branch}' is already ${pr_state,,}."
+    echo "  Create a new branch: git checkout -b feat/<topic>"
+    exit 1
+  fi
+}
+
+main() {
+  local branch
+  # Detached HEAD (dispatched task worktrees) yields no branch name —
+  # tolerate it: only named branches can be protected or PR-checked.
+  branch="$(git symbolic-ref --short HEAD 2>/dev/null || true)"
+  check_protected_branch "${branch}"
+  check_pr_state "${branch}"
+}
+
+main "$@"
