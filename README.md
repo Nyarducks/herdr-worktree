@@ -22,19 +22,29 @@ At least one agent CLI is needed to dispatch workers (`--kind`):
 
 ## Requirements
 
-| Tool | Purpose | Install |
-|---|---|---|
-| `git` ≥ 2.5 | Worktree support | Linux: [below](#installing-git-and-gh-on-linux) / `brew install git` |
-| `gh` (GitHub CLI) | Clone, PR creation, repo auth | Linux: [below](#installing-git-and-gh-on-linux) / `brew install gh` |
-| `jq` | Agent settings JSON edits in `spawn-repo-agent.sh` | `sudo apt install jq` / `brew install jq` |
-| `bash` ≥ 4.3 | Script runtime | Pre-installed on Linux; macOS ships bash 3 — `brew install bash` |
-| `herdr` | Orchestration for dispatched workers | `curl -fsSL https://herdr.dev/install.sh \| sh` / `brew install herdr` |
+| Tool | Purpose |
+|---|---|
+| `git` ≥ 2.5 | Worktree support |
+| `gh` (GitHub CLI) | Clone, PR creation, repo auth |
+| `jq` | Agent settings JSON edits in `spawn-repo-agent.sh` |
+| `bash` ≥ 4.3 | Script runtime (macOS ships bash 3) |
+| `herdr` | Orchestration for dispatched workers |
 
-### Installing git and gh on Linux
+<details>
+<summary>Install on macOS</summary>
+
+```bash
+brew install git gh jq bash herdr
+```
+
+</details>
+
+<details>
+<summary>Install on Linux</summary>
 
 Do not install `git` or `gh` from the distribution's default apt
 repositories — they can ship outdated versions. Use the upstream
-repositories instead.
+repositories instead. `bash` ≥ 4.3 is pre-installed.
 
 `git` (git-core PPA):
 
@@ -57,6 +67,20 @@ sudo apt install git
     && sudo apt update \
     && sudo apt install gh -y
 ```
+
+`jq`:
+
+```bash
+sudo apt install jq
+```
+
+`herdr`:
+
+```bash
+curl -fsSL https://herdr.dev/install.sh | sh
+```
+
+</details>
 
 ## Quick start
 
