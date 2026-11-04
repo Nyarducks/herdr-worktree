@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Usage: spawn-repo-agent.sh [--kind <claude|agy|...>] [--model <model>]
-#          [--effort <level>] <[org/]repo> [-- <task text...>]
+#          [--effort <level>] [--reply-lang <language>] <[org/]repo>
+#          [-- <task text...>]
+#
+# --reply-lang names the human's natural language (e.g. Japanese). The
+# prompt always tells the worker to think in English; with --reply-lang it
+# also tells it to reply in that language, otherwise in the language the
+# human writes in.
 #
 # --model / --effort are mapped to each CLI's own flags:
 #   claude, agy  --model <m>  --effort <e>
@@ -38,7 +44,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 [--kind <claude|agy|...>] [--model <model>] [--effort <level>] <[org/]repo> [-- <task text...>]" >&2
+  echo "Usage: $0 [--kind <claude|agy|...>] [--model <model>] [--effort <level>] [--reply-lang <language>] <[org/]repo> [-- <task text...>]" >&2
   exit 1
 }
 
@@ -246,7 +252,7 @@ main() {
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-  local kind="claude" model="" effort=""
+  local kind="claude" model="" effort="" reply_lang=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --kind) kind="${2:?--kind needs a value}"; shift 2 ;;
@@ -255,6 +261,8 @@ main() {
       --model=*) model="${1#*=}"; shift ;;
       --effort) effort="${2:?--effort needs a value}"; shift 2 ;;
       --effort=*) effort="${1#*=}"; shift ;;
+      --reply-lang) reply_lang="${2:?--reply-lang needs a value}"; shift 2 ;;
+      --reply-lang=*) reply_lang="${1#*=}"; shift ;;
       *) break ;;
     esac
   done
@@ -391,6 +399,16 @@ main() {
   # task the worker renames from it and starts immediately; without one the
   # prompt is a standby instruction so the contract survives for follow-up
   # `herdr agent prompt`s (names like w-<uuid> mean nothing otherwise).
+  # Language contract: reasoning in English (the prompt is English too);
+  # replies to the human in their language — named by the orchestrator via
+  # --reply-lang, or whatever the human writes in when it is not given.
+  local lang_rule
+  if [[ -n "${reply_lang}" ]]; then
+    lang_rule="Language: think in English, but write every reply to the human in ${reply_lang} — including replies to English prompts like this one. Code, commits and repository files follow the repository's own conventions."
+  else
+    lang_rule="Language: think in English, but reply to the human in the natural language they write to you in. Code, commits and repository files follow the repository's own conventions."
+  fi
+
   local prompt
   if [[ -n "${task_text}" ]]; then
     prompt="You are running inside a herdr pane (pane id: ${pane_id}, tab id: ${tab_id:-unknown}).
@@ -400,6 +418,8 @@ First, once the task below is clear to you, pick a short lowercase slug for it a
   herdr tab rename ${tab_id:-<tab-id>} <short-title>
 Slug rules: starts with a lowercase letter, only [a-z0-9_-], at most 32 chars. Then proceed with the task.
 
+${lang_rule}
+
 Task: ${task_text}"
   else
     prompt="You are running inside a herdr pane (pane id: ${pane_id}, tab id: ${tab_id:-unknown}) as a standby worker for ${repo_name} (worktree: ${wt}).
@@ -407,7 +427,9 @@ Task: ${task_text}"
 No task is assigned yet — wait for follow-up prompts. When you receive a task, first pick a short lowercase slug for it and rename yourself and your tab:
   herdr agent rename ${pane_id} <slug>
   herdr tab rename ${tab_id:-<tab-id>} <short-title>
-Slug rules: starts with a lowercase letter, only [a-z0-9_-], at most 32 chars. For now just acknowledge briefly and make no changes."
+Slug rules: starts with a lowercase letter, only [a-z0-9_-], at most 32 chars. For now just acknowledge briefly and make no changes.
+
+${lang_rule}"
   fi
 
   # agent prompt pastes the text + Enter "atomically"; --wait --until

@@ -12,6 +12,18 @@ and `AGENTS.md`/`CLAUDE.md` apply. The orchestrator never edits other
 repos in-process. (For the herdr-worktree repo itself, use
 `development` instead.)
 
+Steering a worker that is already running — moving to its pane,
+relaying an instruction to it, checking status — is `herdr-control`.
+
+## Language
+
+Think in English; reply to the user in the user's natural language.
+Every dispatch passes that language to the worker with
+`--reply-lang <language>` (e.g. `--reply-lang Japanese`), so the worker
+also thinks in English but replies in the user's language. Write the
+task text in English, keeping quoted text, identifiers and file names
+verbatim.
+
 ## Before dispatching — confirm with the user
 
 If the request does not specify both of these, ask *before* dispatching
@@ -37,6 +49,7 @@ in-process fallback for other repositories.
 ## Dispatching a task
 
 ```bash
+scripts/spawn-repo-agent.sh --reply-lang Japanese <[owner/]repo> -- "<task>"
 scripts/spawn-repo-agent.sh <[owner/]repo> -- "<task>"
 scripts/spawn-repo-agent.sh --kind agy <owner>/<repo> -- "<task>"
 scripts/spawn-repo-agent.sh --kind devin <owner>/<repo> -- "<task>"
@@ -140,7 +153,8 @@ task, or should it idle?" — not a `herdr agent prompt` snippet.
 ## Monitoring (pull model)
 
 Workers are plain agents with no reporting protocol — they just go idle
-when done:
+when done. To find a worker from the user's description (task, repo,
+name), and for focus, relays and interrupts, follow `herdr-control`:
 
 ```bash
 herdr agent wait "<pane_id>" --until idle --timeout 600000

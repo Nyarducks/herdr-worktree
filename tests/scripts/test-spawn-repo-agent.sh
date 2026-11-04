@@ -40,6 +40,8 @@ expect_grep "prompt submitted" "${log}" "herdr agent prompt pane-1"
 expect_grep "prompt carries self-rename" "${log}" "herdr agent rename pane-1"
 expect_grep "prompt carries tab rename" "${log}" "herdr tab rename tab-1"
 expect_grep "prompt carries task" "${log}" "fix the flaky test"
+expect_grep "prompt thinks in English" "${log}" "Language: think in English"
+expect_grep "default replies follow the human" "${log}" "in the natural language they write to you in"
 expect_not_grep "no pane run on clean start" "${log}" "herdr pane run"
 expect_not_grep "no Enter nudge on clean submit" "${log}" "send-keys"
 
@@ -305,6 +307,17 @@ expect_grep "agent launched" "${log}" "herdr agent start w-"
 expect_grep "standby prompt submitted" "${log}" "agent prompt pane-1"
 expect_grep "standby keeps rename contract" "${log}" "herdr agent rename pane-1"
 expect_not_grep "no task text in prompt" "${log}" "Task:"
+expect_grep "standby carries language rule" "${log}" "Language: think in English"
+
+echo "== --reply-lang names the reply language =="
+
+: > "${HERDR_STUB_LOG}"
+"${spawn}" --reply-lang Japanese owner/SpawnRepo -- "x" > /dev/null
+log="$(cat "${HERDR_STUB_LOG}")"
+expect_grep "reply language in prompt" "${log}" "write every reply to the human in Japanese"
+: > "${HERDR_STUB_LOG}"
+"${spawn}" --reply-lang=Japanese owner/SpawnRepo > /dev/null
+expect_grep "reply language in standby prompt" "$(cat "${HERDR_STUB_LOG}")" "reply to the human in Japanese"
 
 echo "== bare -- with no text also spawns idle =="
 

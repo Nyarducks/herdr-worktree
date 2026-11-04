@@ -3,7 +3,7 @@ type: Design Doc
 title: herdr-worktree
 description: Why herdr-worktree exists, what it does, and how the parts fit together — the entry point to docs/design/.
 status: current
-last_modified: 2026-11-03
+last_modified: 2026-11-04
 tags: [overview, architecture, design]
 sources: [docs/design]
 ---
@@ -143,7 +143,7 @@ for t in tests/scripts/test-*.sh; do bash "$t"; done   # per-script tests
 
 | Doc | Contents |
 |---|---|
-| [orchestration.md](orchestration.md) | How to ask the orchestrator to run workers — single-call dispatch via `spawn-repo-agent.sh` (task optional) with prompt-stall recovery; lifecycle, monitoring, natural-language reporting, ownership, cleanup |
+| [orchestration.md](orchestration.md) | How to ask the orchestrator to run workers — single-call dispatch via `spawn-repo-agent.sh` (task optional) with prompt-stall recovery; lifecycle, monitoring, language contract, natural-language steering of running workers, ownership, cleanup |
 
 Fact inventories (config tables, script/skill lists) live in
 [../reference/](../reference/). Decision records live in

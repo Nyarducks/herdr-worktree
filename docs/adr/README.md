@@ -18,3 +18,4 @@ the change that introduces the decision; see `CONTRIBUTING.md`.
 | [0009](0009-pre-answer-first-run-dialogs.md) | Pre-answer agent first-run dialogs for new worktrees |
 | [0010](0010-model-and-effort-pass-through.md) | Pass model and effort to workers; cache each CLI's model catalog |
 | [0011](0011-macos-portability.md) | Support macOS with portable locking and BSD-safe tooling |
+| [0012](0012-language-contract-and-worker-steering.md) | Think in English, reply in the human's language; steer workers by natural-language reference |

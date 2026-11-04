@@ -3,9 +3,9 @@ type: Design Doc
 title: Orchestration — Orchestrator and Worker lifecycle
 description: How the orchestrator dispatches, monitors, and steers workers through herdr; worker lifecycle and ownership.
 status: current
-last_modified: 2026-11-03
+last_modified: 2026-11-04
 tags: [orchestrator, herdr, dispatch, worker]
-sources: [scripts/spawn-repo-agent.sh, .agents/skills/worktree-development/SKILL.md]
+sources: [scripts/spawn-repo-agent.sh, scripts/list-workers.sh, .agents/skills/worktree-development/SKILL.md, .agents/skills/herdr-control/SKILL.md]
 ---
 
 # Orchestration
@@ -42,7 +42,7 @@ sequenceDiagram
     O->>R: agent prompt <pane> (follow-up)
 ```
 
-Key decisions (see ADR-0003, ADR-0004, ADR-0008, ADR-0009, ADR-0010):
+Key decisions (see ADR-0003, ADR-0004, ADR-0008, ADR-0009, ADR-0010, ADR-0012):
 
 - **Herdr-native model**: one workspace per repo (matched by label), one
   tab per task, the worker in the tab's root pane. No herdr-worktree-side state
@@ -76,6 +76,10 @@ Key decisions (see ADR-0003, ADR-0004, ADR-0008, ADR-0009, ADR-0010):
 - **Cached model catalog**: model ids and effort levels come from
   `agent-models.sh`, which caches each CLI's answer, so dispatch never
   re-queries the CLIs and the orchestrator resolves names from one list.
+- **Language contract**: agents think in English and reply to the
+  human in the human's natural language. The orchestrator passes that
+  language at dispatch (`--reply-lang`), and the prompt preamble carries
+  the rule to the worker; prompts to workers are written in English.
 - **Pull-based monitoring**: workers carry no reporting protocol;
   `herdr agent wait/read/prompt` is the interface.
 - **Dispatch output is the startup confirmation**: the script already
@@ -112,6 +116,32 @@ any shell.
 Only caveat: avoid the human and the orchestrator prompting the same
 worker concurrently — contexts interleave. In principle the side that
 spawned the worker manages it, but human intervention is always allowed.
+
+## Natural-language steering (`herdr-control`)
+
+The human refers to workers by what they do, not by pane id ("the DB
+role worker", "the billing task"). The orchestrator resolves such a
+reference with `list-workers.sh`, which lists only agents running in
+task worktrees, with their pane id, self-chosen name, repository, state,
+tab label and terminal title. One match is acted on; several are put to
+the human as a question; none is reported.
+
+```mermaid
+flowchart LR
+    H["Human: 'tell the DB role<br/>worker to add tests'"] --> L[list-workers.sh DB role]
+    L -->|one pane| S{agent state}
+    L -->|several| Q[ask the human]
+    L -->|none| N[report; offer dispatch]
+    S -->|idle / done| P[agent prompt, English]
+    S -->|working| C[ask: queue or interrupt]
+    S -->|blocked| B[show what it asks; human decides]
+```
+
+The resolved pane id drives `herdr agent focus` (show the worker's pane),
+`agent prompt` (relay), `agent read`/`get` (status) and
+`pane send-keys esc` (interrupt). A working worker is not prompted
+without asking, and a blocked worker's dialog is never answered by the
+orchestrator.
 
 ## Ownership and cleanup
 

@@ -3,7 +3,7 @@ type: Reference
 title: Scripts
 description: Behavior contract of every script under scripts/ — what it does, what it writes, and what it prints.
 status: current
-last_modified: 2026-11-03
+last_modified: 2026-11-04
 tags: [scripts, reference]
 sources: [scripts]
 ---
@@ -33,7 +33,7 @@ dir — a repo's own hooks (regular files) and foreign symlinks are never
 clobbered or fatal to the run. Prints the absolute worktree path — use
 it for all edits.
 
-### `spawn-repo-agent.sh [--kind <kind>] [--model <model>] [--effort <level>] <[org/]repo> [-- <task>]`
+### `spawn-repo-agent.sh [--kind <kind>] [--model <model>] [--effort <level>] [--reply-lang <language>] <[org/]repo> [-- <task>]`
 
 Dispatches a dedicated worker agent via herdr. Creates a collision-free
 task worktree (`worktree/<repo>/task/<uuid>`, detached HEAD at
@@ -55,7 +55,9 @@ model's levels from `agent-models.sh`, or the kind-wide list when the
 model has none; other kinds reject both flags. The prompt is the task plus a
 self-naming preamble, or — with no task — a standby instruction that
 keeps the naming contract until work arrives via
-`herdr agent prompt <pane> "<task>"`. If the prompt submission stalls
+`herdr agent prompt <pane> "<task>"`. Both carry a language rule: think
+in English and reply in the `--reply-lang` language, or — without it —
+in the language the human writes in. If the prompt submission stalls
 (agent TUI swallowed the trailing Enter under bracketed paste), the
 script sends a real `pane send-keys <pane> Enter` and re-waits; if the
 agent is still idle (the paste never arrived),
@@ -74,6 +76,17 @@ the worktree root, so only the repo's own resources load. Agent-settings merges 
 `mkdir` lockdir — `flock(1)` is Linux-only and never a documented
 requirement. Prints `Dispatched to pane
 <pane_id>` — keep the pane id for monitoring. See `orchestration.md`.
+
+### `list-workers.sh [query...]`
+
+Lists the dispatched workers in the running herdr session — agents whose
+cwd is under `<lab>/worktree/` (lab: `WORKTREE_LAB_DIR`, else the
+script's parent dir) — one tab-separated line each:
+`pane_id name repo status tab_label title` (`-` for no name or label).
+Query words keep only lines containing every word, case-insensitively;
+no match prints `No worker matches: …` and exits 1. Read-only. Used by
+the `herdr-control` skill to resolve the human's description of a worker
+to a pane id.
 
 ### `agent-models.sh [--refresh] <kind> [models|efforts]`
 
