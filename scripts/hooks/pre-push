@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# pre-push: remind about PR workflow rules before every push
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+template="${repo_root}/.github/pull_request_template.md"
+
+# --- PR template reminder ---
+if [[ -f "${template}" ]]; then
+    echo ""
+    echo "[pre-push] PR template found at .github/pull_request_template.md"
+    echo "           Use it as the --body when running gh pr create."
+fi
+
+# --- Language reminder ---
+echo ""
+echo "[pre-push] PR title, body, and all Decision Log entries must be written in English."
+
+# --- Decision Log reminder (fires on 2nd+ commit pushed to an existing open PR) ---
+if command -v gh &>/dev/null; then
+    pr_num="$(gh pr view --json number,state -q 'select(.state=="OPEN") | .number' 2>/dev/null || true)"
+    if [[ -n "${pr_num}" ]]; then
+        echo ""
+        echo "[pre-push] Open PR #${pr_num} detected — after pushing, append a Decision Log entry:"
+        echo "           scripts/append-pr-log.sh <owner>/<repo> ${pr_num} worktree/<repo>/<branch> <<'EOF'"
+        echo "           ### What changed"
+        echo "           - <describe changes in this commit>"
+        echo "           ### Why"
+        echo "           <reason: review feedback / bug found / design refinement / etc.>"
+        echo "           EOF"
+    fi
+fi
+
+# --- docs freshness gate (fires only in repos shipping the check) ---
+docs_check="${repo_root}/scripts/check-docs-stale.sh"
+if [[ -f "${docs_check}" ]]; then
+    bash "${docs_check}"
+fi
+
+# --- test coverage gate (fires only in repos shipping the check) ---
+coverage_check="${repo_root}/scripts/check-test-coverage.sh"
+if [[ -f "${coverage_check}" ]]; then
+    bash "${coverage_check}"
+fi
+
+echo ""

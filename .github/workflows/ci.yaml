@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  pull_request:
+    # Fires on every PR open/update; the changes job below gates the actual
+    # test run to pushes that touched *.sh or this workflow. `paths:` on the
+    # trigger can't express this — it evaluates the whole PR diff, so a
+    # docs-only push on a branch that contains .sh would still run CI.
+  workflow_dispatch:
+    # Manual runs diff against the default branch — there is no PR base in
+    # the dispatch event.
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      shell: ${{ steps.filter.outputs.shell }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: filter
+        run: |
+          # workflow_dispatch: every check is in scope, unconditionally
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "manual dispatch on ${GITHUB_REF_NAME}: running all checks"
+            echo "shell=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # synchronize: only the just-pushed commits (event.before..event.after)
+          # opened/reopened: the whole diff against the base
+          if [[ "${{ github.event.action }}" == "synchronize" ]]; then
+            range="${{ github.event.before }}..${{ github.event.after }}"
+          else
+            git fetch -q origin "${{ github.base_ref || github.event.repository.default_branch }}"
+            range="FETCH_HEAD...HEAD"
+          fi
+          echo "range: ${range}"
+          git diff --name-only "${range}"
+          if git diff --name-only "${range}" | grep -qE '\.sh$|\.github/workflows/'; then
+            echo "shell=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "shell=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  shell-test:
+    needs: changes
+    if: needs.changes.outputs.shell == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install test dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Script tests
+        run: |
+          failed=0
+          for t in tests/scripts/test-*.sh; do
+            echo "### ${t}"
+            bash "${t}" || failed=1
+          done
+          exit "${failed}"
+
+      - name: Test coverage gate
+        run: bash scripts/check-test-coverage.sh
+
+  # Same suites on macOS.
+  shell-test-macos:
+    needs: changes
+    if: needs.changes.outputs.shell == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # macOS ships bash 3 — the suites need bash ≥ 4.3 (namerefs), so
+      # install Homebrew bash and prepend brew's bin dir for every
+      # subsequent step.
+      - name: Install test dependencies
+        run: brew install bash jq
+
+      - name: Prefer Homebrew tools
+        run: echo "$(brew --prefix)/bin" >> "${GITHUB_PATH}"
+
+      - name: Verify bash ≥ 4
+        run: bash -c 'echo "$BASH_VERSION"; [[ "${BASH_VERSINFO[0]}" -ge 4 ]]'
+
+      - name: Script tests
+        run: |
+          failed=0
+          for t in tests/scripts/test-*.sh; do
+            echo "### ${t}"
+            bash "${t}" || failed=1
+          done
+          exit "${failed}"
+
+      - name: Test coverage gate
+        run: bash scripts/check-test-coverage.sh
+
+  shell-lint:
+    needs: changes
+    if: needs.changes.outputs.shell == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Lint
+        run: bash scripts/lint.sh
+
+  # Docs freshness is cheap (git diff + frontmatter parse) and applies to
+  # any file a doc derives from — not just *.sh — so it runs ungated.
+  docs-freshness:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base
+        run: git fetch -q origin "${{ github.base_ref || github.event.repository.default_branch }}"
+
+      - name: Check docs freshness
+        run: bash scripts/check-docs-stale.sh "origin/${{ github.base_ref || github.event.repository.default_branch }}"
