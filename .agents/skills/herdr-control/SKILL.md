@@ -66,7 +66,7 @@ and other agents are excluded on purpose.
 | Send an instruction to a worker / task | relay (below) |
 | Status of one worker | `herdr agent get <pane_id>` for the state; `herdr agent read <pane_id> --source recent-unwrapped --lines 200` for what it is doing — summarize, don't paste |
 | Status of all workers | `scripts/list-workers.sh`, summarized per worker (name, repo, state, task) |
-| Wait for a worker to finish | `herdr agent wait <pane_id> --until idle --until blocked --timeout <ms>` |
+| Wait for a worker to finish | `herdr agent wait <pane_id> --until idle --until done --until blocked --timeout <ms>` (`done` = finished but not yet seen; leaving it out waits until the timeout) |
 | Interrupt a worker ("stop", "cancel that") | `herdr pane send-keys <pane_id> esc`, then confirm the state |
 | Close a finished worker | only after the user approves cleanup — see `orchestration.md` "Ownership and cleanup" |
 

@@ -186,12 +186,12 @@ EOF
   export AGENT_MODELS_CACHE_DIR="${t}/agent-models"
 }
 
-# seed_origin <name> — create a local bare origin with a main branch
-# containing one file; stub_gh clones from it.
+# seed_origin <name> [branch] — create a local bare origin with one branch
+# (default main) holding one commit; stub_gh clones from it.
 seed_origin() {
-  local name="$1"
+  local name="$1" branch="${2:-main}"
   local seed="${t}/seed-${name}"
-  git init -q -b main "${seed}"
+  git init -q -b "${branch}" "${seed}"
   git -C "${seed}" -c user.email=t@t -c user.name=t commit -qm init --allow-empty
   git clone -q --bare "${seed}" "${STUB_ORIGIN}/${name}.git"
 }

@@ -2,7 +2,8 @@
 # Usage: setup-repo.sh <[org/]repo-name>
 #
 # Clones the repository into $LAB/repos/<repo-name>/ if not present,
-# or fetches and fast-forwards to the latest main if it already exists.
+# or fetches and fast-forwards to the latest base branch (main, else
+# master — scripts/lib/repo.sh) if it already exists.
 # Prints the absolute path to the repository on stdout.
 #
 # Org resolution order:
@@ -69,13 +70,15 @@ update_repo() {
       | sed 's|.*github\.com[:/]\([^/]*\)/.*|\1|')"
   fi
   echo "Updating ${repo_name} ..." >&2
-  git -C "${repo_path}" fetch origin main >&2
+  local base
+  base="$(hw_base_branch "${repo_path}")"
+  git -C "${repo_path}" fetch origin "${base}" >&2
   # A bare base clone has no work tree to pull into; the fetch above already
-  # refreshed origin/main, which is all create-worktree.sh consumes.
+  # refreshed origin/<base>, which is all create-worktree.sh consumes.
   if [[ "$(git -C "${repo_path}" rev-parse --is-bare-repository)" == "true" ]]; then
     return
   fi
-  git -C "${repo_path}" pull --ff-only origin main >&2
+  git -C "${repo_path}" pull --ff-only origin "${base}" >&2
 }
 
 main() {
@@ -83,6 +86,8 @@ main() {
 
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  # shellcheck source=scripts/lib/repo.sh
+  source "${script_dir}/lib/repo.sh"
 
   parse_repo_arg "$1"
 

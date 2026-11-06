@@ -17,14 +17,15 @@ All scripts are bash, `set -euo pipefail`, and safe to re-run.
 ### `setup-repo.sh <[org/]repo>`
 
 Imports a GitHub repository into the lab. Clones into `repos/<repo>/` on
-first run; on later runs fetches and fast-forwards the default branch.
+first run; on later runs fetches and fast-forwards the base branch — `main`, else
+`master` (`scripts/lib/repo.sh`).
 If the repo ships `scripts/setup-hooks.sh`, runs it once at the base
 clone — linked worktrees share the common git dir, so hooks need no
 per-worktree install. Prints the absolute repo path.
 
 ### `create-worktree.sh [--detach] <[org/]repo> <name>`
 
-Creates `worktree/<repo>/<name>` based on `origin/main` — on a new branch
+Creates `worktree/<repo>/<name>` based on `origin/main` (or `origin/master` when origin has no main; neither is refused before anything is created) — on a new branch
 named `<name>` by default, or on a detached HEAD when `--detach` is given
 (used for dispatched task worktrees; no branch is named before the task
 is understood). Calls `setup-repo.sh` internally (clone-or-update), then
@@ -37,7 +38,7 @@ it for all edits.
 
 Dispatches a dedicated worker agent via herdr. Creates a collision-free
 task worktree (`worktree/<repo>/task/<uuid>`, detached HEAD at
-`origin/main`), reuses or creates the repo's herdr workspace + tab, and
+`origin/main` or `origin/master`), reuses or creates the repo's herdr workspace + tab, and
 launches the agent unconfined via `herdr agent start` (falling back to
 `pane run`), then submits a prompt. `--model` / `--effort` map to each
 CLI's flags:
@@ -142,5 +143,5 @@ Run by the `pre-push` git hook and as the last step of the CI
 
 | Hook | Behavior |
 |---|---|
-| `pre-commit` | Blocks commits to `main` and to branches whose PR is already merged/closed |
+| `pre-commit` | Blocks commits to `main` or `master` and to branches whose PR is already merged/closed |
 | `pre-push` | PR-workflow reminders; runs the repo's `scripts/check-docs-stale.sh` and `scripts/check-test-coverage.sh` when present, blocking the push on failure |

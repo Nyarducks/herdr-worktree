@@ -100,7 +100,7 @@ One call does the whole sequence:
 
 1. `create-worktree.sh --detach` imports/refreshes `repos/<repo>` and
    creates `worktree/<repo>/task/<uuid>` on a **detached HEAD at
-   `origin/main`** — the uuid leaf keeps concurrent dispatches
+   `origin/main`** (`origin/master` when the repo has no main) — the uuid leaf keeps concurrent dispatches
    collision-free, and no branch is named before the task is understood.
    The worker names its own branch if and when it needs one; the
    orchestrator does not prescribe one.
@@ -157,7 +157,7 @@ when done. To find a worker from the user's description (task, repo,
 name), and for focus, relays and interrupts, follow `herdr-control`:
 
 ```bash
-herdr agent wait "<pane_id>" --until idle --timeout 600000
+herdr agent wait "<pane_id>" --until idle --until done --until blocked --timeout 600000
 herdr agent read "<pane_id>" --source recent-unwrapped --lines 200
 ```
 

@@ -3,7 +3,7 @@ type: Design Doc
 title: herdr-worktree
 description: Why herdr-worktree exists, what it does, and how the parts fit together — the entry point to docs/design/.
 status: current
-last_modified: 2026-11-04
+last_modified: 2026-11-06
 tags: [overview, architecture, design]
 sources: [docs/design]
 ---
@@ -15,7 +15,8 @@ sources: [docs/design]
 Enable safe, concurrent development across multiple repositories from a
 single terminal, orchestrated through herdr.
 
-- One task = one isolated `git worktree`; the base clone is never edited.
+- One task = one isolated `git worktree`, started from the remote's `main`
+  (`master` when a repository has no `main`); the base clone is never edited.
 - A human talks to one **Orchestrator**; real work runs in separate
   **Worker** agent processes.
 - Each worker operates inside the target repository, so that repo's own

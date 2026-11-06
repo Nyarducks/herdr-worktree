@@ -45,6 +45,18 @@ else
   bad "existing clone fetches updates"
 fi
 
+echo "== master-only repo =="
+
+seed_origin OldRepo master
+out="$(WORKTREE_LAB_DIR="${lab}" "${repo_root}/scripts/setup-repo.sh" owner/OldRepo)"
+expect_rc "master clone -> exit 0" "$?" 0
+git -C "${t}/seed-OldRepo" -c user.email=t@t -c user.name=t commit -qm second --allow-empty
+git -C "${t}/seed-OldRepo" push -q "${STUB_ORIGIN}/OldRepo.git" master
+WORKTREE_LAB_DIR="${lab}" "${repo_root}/scripts/setup-repo.sh" owner/OldRepo > /dev/null 2>"${t}/err"
+expect_rc "master update -> exit 0" "$?" 0
+expect_eq "master update fast-forwards" "$(git -C "${lab}/repos/OldRepo" rev-parse HEAD)" "$(git -C "${t}/seed-OldRepo" rev-parse HEAD)"
+expect_not_grep "no main fetched" "$(cat "${t}/err")" "couldn't find remote ref main"
+
 echo "== org resolution =="
 
 out="$(WORKTREE_LAB_DIR="${lab}" GH_ORG=other-org "${repo_root}/scripts/setup-repo.sh" TestRepo)"

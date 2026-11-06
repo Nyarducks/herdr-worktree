@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # test-create-worktree.sh — scripts/create-worktree.sh creates
-# worktree/<repo>/<branch> on a new branch from origin/main, refuses to
+# worktree/<repo>/<branch> on a new branch from origin/main (or master), refuses to
 # overwrite an existing worktree, and installs herdr-worktree's git hooks.
 set -uo pipefail
 
@@ -34,6 +34,27 @@ expect_eq "HEAD detached" "${head_ref}" "HEAD"
 base="$(git -C "${lab}/worktree/TestRepo/task/abc123" rev-parse HEAD)"
 expect_eq "based on origin/main" "${base}" "$(git -C "${lab}/repos/TestRepo" rev-parse origin/main)"
 expect_eq "no branch created" "$(git -C "${lab}/repos/TestRepo" branch --list 'task/abc123')" ""
+
+echo "== master-only repo starts from origin/master =="
+
+seed_origin OldRepo master
+out="$(WORKTREE_LAB_DIR="${lab}" "${repo_root}/scripts/create-worktree.sh" --detach owner/OldRepo task/def456)"
+expect_rc "master repo -> exit 0" "$?" 0
+expect_grep "prints detached at master" "${out}" "HEAD:   detached at origin/master"
+expect_eq "based on origin/master" "$(git -C "${lab}/worktree/OldRepo/task/def456" rev-parse HEAD)" "$(git -C "${lab}/repos/OldRepo" rev-parse origin/master)"
+out="$(WORKTREE_LAB_DIR="${lab}" "${repo_root}/scripts/create-worktree.sh" owner/OldRepo feat/x)"
+expect_grep "branch from origin/master" "${out}" "Branch: feat/x (from origin/master)"
+err="$(git -C "${lab}/repos/OldRepo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m direct 2>&1)"
+expect_rc "pre-commit blocks master" "$?" nz
+expect_grep "says why" "${err}" "direct commits to master are not allowed"
+
+echo "== neither main nor master is refused =="
+
+seed_origin OddRepo trunk
+err="$(WORKTREE_LAB_DIR="${lab}" "${repo_root}/scripts/create-worktree.sh" --detach owner/OddRepo task/ghi789 2>&1)"
+expect_rc "no main/master -> error" "$?" nz
+expect_grep "names both branches" "${err}" "neither a main nor a master branch"
+expect_file "no worktree dir left" "${lab}/worktree/OddRepo" absent
 
 echo "== refuses to clobber =="
 

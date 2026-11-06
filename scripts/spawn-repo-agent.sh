@@ -23,7 +23,7 @@
 #
 # Dispatches a dedicated agent process via herdr:
 #   1. imports/refreshes repos/<repo> and creates a worktree at
-#      worktree/<repo>/task/<uuid> with a detached HEAD at origin/main —
+#      worktree/<repo>/task/<uuid> with a detached HEAD at origin/main (or master) —
 #      the uuid leaf keeps concurrent dispatches collision-free and no
 #      branch is named before the task is understood
 #   2. reuses the repo's herdr workspace (one workspace per repo, matched by
@@ -324,7 +324,7 @@ main() {
   # create-worktree.sh also imports/refreshes repos/<repo> via setup-repo.sh
   # and installs herdr-worktree's git hooks. Its summary goes to stdout; only the
   # Path line is consumed here. The worktree starts on a detached HEAD at
-  # origin/main — no branch is named until the work (and its slug) is known.
+  # origin/main (or master) — no branch is named until the work (and its slug) is known.
   wt="$("${script_dir}/create-worktree.sh" --detach "${repo_arg}" "${leaf}" |
     awk '/^  Path:/ {print $2; exit}')"
   [[ -n "${wt}" && -d "${wt}" ]] || {

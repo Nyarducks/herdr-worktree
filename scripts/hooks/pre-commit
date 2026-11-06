@@ -3,7 +3,7 @@ set -euo pipefail
 
 check_protected_branch() {
   local branch="$1"
-  if [[ "${branch}" == "main" ]]; then
+  if [[ "${branch}" == "main" || "${branch}" == "master" ]]; then
     echo "[pre-commit] direct commits to ${branch} are not allowed. use a feature branch."
     exit 1
   fi

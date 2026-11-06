@@ -3,9 +3,9 @@ type: Design Doc
 title: Orchestration — Orchestrator and Worker lifecycle
 description: How the orchestrator dispatches, monitors, and steers workers through herdr; worker lifecycle and ownership.
 status: current
-last_modified: 2026-11-04
+last_modified: 2026-11-06
 tags: [orchestrator, herdr, dispatch, worker]
-sources: [scripts/spawn-repo-agent.sh, scripts/list-workers.sh, .agents/skills/worktree-development/SKILL.md, .agents/skills/herdr-control/SKILL.md]
+sources: [scripts/spawn-repo-agent.sh, scripts/list-workers.sh, scripts/lib/repo.sh, .agents/skills/worktree-development/SKILL.md, .agents/skills/herdr-control/SKILL.md]
 ---
 
 # Orchestration
@@ -28,7 +28,7 @@ sequenceDiagram
 
     H->>O: "do task X in repo R"
     O->>H: confirm agent kind + repo via ask-question tool<br/>(only when the request omits them)
-    O->>G: create-worktree.sh --detach → worktree/R/task/<uuid><br/>(detached HEAD at origin/main)
+    O->>G: create-worktree.sh --detach → worktree/R/task/<uuid><br/>(detached HEAD at origin/main or master)
     O->>R: workspace get/create (label = repo)<br/>tab create → pane
     O->>R: agent start — agent in the tab's pane, cwd=worktree
     O->>R: agent prompt — task + self-name preamble,<br/>or standby contract when no task given
@@ -52,7 +52,7 @@ Key decisions (see ADR-0003, ADR-0004, ADR-0008, ADR-0009, ADR-0010, ADR-0012):
   The worker knows nothing about herdr-worktree — the preamble is the whole
   contract.
 - **Detached start**: task worktrees begin on a detached HEAD at
-  `origin/main`; a branch is named only once the work — and its slug —
+  `origin/main` (`origin/master` for a repo without main); a branch is named only once the work — and its slug —
   is known (see ADR-0002).
 - **Ask before dispatch**: when the request omits the agent kind or the
   repository, the orchestrator asks the user through its ask-question

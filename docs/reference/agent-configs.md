@@ -3,7 +3,7 @@ type: Reference
 title: Agent config directories
 description: Which config directory each supported agent CLI reads, and what lives there.
 status: current
-last_modified: 2026-11-04
+last_modified: 2026-11-06
 tags: [agents, config, reference]
 sources: [.claude, .agents]
 ---
@@ -29,7 +29,8 @@ Notes:
   contract, and user-facing reports stay natural-language (the
   orchestrator runs herdr itself). Steering workers that are already
   running (focus, relayed instructions, status, interrupt) lives in the
-  `herdr-control` skill. See `orchestration.md`.
+  `herdr-control` skill; waiting for a worker treats `done` (finished,
+  not yet seen) like `idle`. See `orchestration.md`.
 - There is no root `AGENTS.md`/`CLAUDE.md`: the rules for changing
   herdr-worktree live in the
   `development` skill so they never reach workers through parent-directory
