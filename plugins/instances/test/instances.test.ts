@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { CliError } from "../src/context.ts";
 import * as container from "../src/container.ts";
+import * as contract from "../src/contract.ts";
 import * as instances from "../src/instances.ts";
 import { readManifest, writeManifest } from "../src/manifest.ts";
 import { hasInclude, probeWord } from "../src/ssh.ts";
@@ -649,5 +650,76 @@ describe("labels, listing and ensure of many", () => {
     world.out = [];
     assert.equal(instances.ensure(ctx, []), false);
     assert.deepEqual(world.out, ["hw-a: ready (herdr --machine hw-a)"]);
+  });
+});
+
+describe("plugin disable and enable", () => {
+  it("describe lists the enable and disable hooks", () => {
+    assert.deepEqual(contract.describe().hooks, ["enable", "disable"]);
+  });
+
+  it("disable takes the machines out of herdr and names the running containers; enable brings those back", () => {
+    const { world, ctx } = setup();
+    instances.add(ctx, "container", "hw-a", undefined, { port: 2301, label: "ClientA" });
+    instances.add(ctx, "container", "hw-b", undefined, { port: 2302 });
+    world.probe.set("box", "ok");
+    instances.add(ctx, "remote", "box", "dev@192.0.2.10", {});
+    world.running.delete("hw-b");
+    world.machines = world.machines.filter((m) => m.target !== "hw-b"); // never registered
+    world.err.length = 0;
+
+    assert.equal(contract.disable(ctx), true);
+    assert.equal(world.machines.length, 0, "no machine of the plugin left in herdr");
+    const err = world.err.join("\n");
+    assert.match(err, /ClientA: removed from herdr's machines/);
+    assert.match(err, /box: removed from herdr's machines/);
+    assert.match(err, /ClientA is still running; stop it with: docker compose -p hw-a stop/);
+    assert.doesNotMatch(err, /hw-b is still running/);
+    assert.deepEqual(readManifest(ctx).instances.map((i) => i.name), ["hw-a", "hw-b", "box"], "the manifest is kept");
+
+    world.err.length = 0;
+    world.out.length = 0;
+    assert.equal(contract.enable(ctx), true);
+    assert.deepEqual(world.machines.map((m) => `${m.target}=${m.label}`).sort(), ["box=box", "hw-a=ClientA"], "only the machines disable took out");
+    assert.equal(contract.enable(ctx), true, "a second enable has nothing to bring back");
+    assert.equal(world.find("herdr machine add hw-a").length, 2, "added once at add, once on enable");
+  });
+
+  it("disable keeps a label renamed in herdr", () => {
+    const { world, ctx } = setup();
+    instances.add(ctx, "container", "hw-a", undefined, { port: 2301 });
+    world.machines = world.machines.map((m) => ({ ...m, label: "Renamed" }));
+    contract.disable(ctx);
+    contract.enable(ctx);
+    assert.equal(readManifest(ctx).instances[0]?.label, "Renamed");
+    assert.deepEqual(world.machines.map((m) => m.label), ["Renamed"]);
+  });
+
+  it("disable fails, with what to do, when herdr cannot list or remove its machines", () => {
+    const { world, ctx } = setup();
+    instances.add(ctx, "container", "hw-a", undefined, { port: 2301 });
+    world.err.length = 0;
+    world.listFails = true;
+    assert.equal(contract.disable(ctx), false);
+    assert.match(world.err.join("\n"), /cannot read herdr's machines .*remove hw-a's machine in herdr/);
+    world.listFails = false;
+    world.removeFails = true;
+    world.err.length = 0;
+    assert.equal(contract.disable(ctx), false);
+    assert.match(world.err.join("\n"), /hw-a: could not remove herdr machine id-hw-a/);
+    assert.equal(world.machines.length, 1);
+  });
+
+  it("enable reports a machine it cannot bring back and keeps it for the next enable", () => {
+    const { world, ctx } = setup();
+    world.probe.set("box", "ok");
+    instances.add(ctx, "remote", "box", "dev@192.0.2.10", {});
+    contract.disable(ctx);
+    world.probe.set("box", "no-server");
+    assert.equal(contract.enable(ctx), false);
+    assert.equal(world.machines.length, 0);
+    world.probe.set("box", "ok");
+    assert.equal(contract.enable(ctx), true);
+    assert.deepEqual(world.machines.map((m) => m.target), ["box"]);
   });
 });

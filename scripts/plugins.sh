@@ -19,10 +19,16 @@
 #             skill directory its describe names is linked as
 #             .agents/skills/plugin-<id>-<skill> (git-ignored), so agents
 #             list the plugin's skills next to core's (ADR-0019); a skill
-#             whose name a core skill already uses is refused.
-#   disable   removes those links. Nothing the plugin created is touched (its
+#             whose name a core skill already uses is refused. A plugin
+#             whose describe lists the "enable" hook is then called with
+#             `hw-plugin enable` (instances: brings back the machines its
+#             disable took out of herdr).
+#   disable   calls `hw-plugin disable` first when describe lists that hook
+#             (instances: takes its machines out of herdr), then removes
+#             those links. Nothing else the plugin created is touched (its
 #             containers, volumes and manifest stay); enabling it again picks
-#             them up.
+#             them up. A hook that fails is a warning: the plugin is still
+#             enabled or disabled.
 #   machines  the machines enabled plugins provide: plugin id, label, target.
 #
 # HW_PLUGINS_DIR overrides <checkout>/.plugins and HW_SKILLS_DIR
@@ -44,6 +50,17 @@ usage() {
 
 core_dir() {
   dirname "${SCRIPT_DIR}"
+}
+
+# run_hook <id> <plugin dir> <describe json> <hook> — call `hw-plugin <hook>`
+# when the plugin's describe lists it; its messages pass through, and a
+# failure is a warning
+run_hook() {
+  local id="$1" dir="$2" json="$3" hook="$4"
+  jq -e --arg h "${hook}" '(.hooks // []) | index($h) != null' <<< "${json}" >/dev/null 2>&1 || return 0
+  if ! "${dir}/bin/hw-plugin" "${hook}" </dev/null >&2; then
+    echo "Warning: ${id}: its ${hook} step failed (see above); it is ${hook}d anyway" >&2
+  fi
 }
 
 # describe_field <plugin dir> <jq path> — a field of its describe; empty when
@@ -234,6 +251,7 @@ cmd_enable() {
   fi
   ln -s "${dir}" "${root}/${id}"
   echo "${id}: enabled ($(jq -r '.name // empty' <<< "${json}"); ${dir})"
+  run_hook "${id}" "${dir}" "${json}" enable
 }
 
 cmd_disable() {
@@ -241,9 +259,12 @@ cmd_disable() {
   local link
   link="$(hw_plugins_root)/$1"
   [[ -L "${link}" ]] || hw_die "plugin '$1' is not enabled (see: plugins.sh ls)"
-  unlink_skills "$1" "$(plugin_dir_of "${link}")"
+  local dir
+  dir="$(plugin_dir_of "${link}")"
+  run_hook "$1" "${dir}" "$("${dir}/bin/hw-plugin" describe </dev/null 2>/dev/null)" disable
+  unlink_skills "$1" "${dir}"
   rm -f "${link}"
-  echo "$1: disabled (what it created is kept; enable it again to use it)"
+  echo "$1: disabled (its manifest, containers and volumes are kept; enable it again to use them)"
 }
 
 cmd_machines() {

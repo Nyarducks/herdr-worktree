@@ -28,3 +28,4 @@ the change that introduces the decision; see `CONTRIBUTING.md`.
 | [0019](0019-link-plugin-skills.md) | Link an enabled plugin's skills into .agents/skills |
 | [0020](0020-two-way-label-sync.md) | Sync instance labels both ways: the side that changed wins |
 | [0021](0021-bats-and-sourceable-modules.md) | Test shell with bats; write scripts as sourceable modules |
+| [0022](0022-plugin-enable-disable-hooks.md) | Plugins may hook enable and disable; instances takes its machines out of herdr while off |

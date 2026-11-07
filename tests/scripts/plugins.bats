@@ -3,7 +3,8 @@
 # under HW_PLUGINS_DIR after its describe answers contract 1 and links its
 # skills under HW_SKILLS_DIR, ls shows it, machines lists what it provides,
 # disable removes only the links, and a plugin with another contract, no
-# hw-plugin, or a skill clashing with an existing one is refused.
+# hw-plugin, or a skill clashing with an existing one is refused. A plugin
+# that lists hooks in describe is called after enable and before disable.
 
 # common_setup (helpers.bash) assigns repo_root, t and stub_bin; shellcheck
 # does not follow bats `load`.
@@ -24,9 +25,28 @@ make_plugin() {
   mkdir -p "${dir}/bin"
   cat > "${dir}/bin/hw-plugin" <<EOF
 #!/usr/bin/env bash
+echo "\$1" >> "${dir}/calls"
 case "\$1" in
   describe) echo '{"id":"${id}","name":"Fake ${id}","version":"1.2.3","contract":${contract},"skills":[${skills}]}' ;;
   machines) echo '[{"label":"vm","target":"vm-1","dir":"~/hw","registered":true}]' ;;
+  *) exit 2 ;;
+esac
+EOF
+  chmod +x "${dir}/bin/hw-plugin"
+}
+
+# make_hooked_plugin <dir> <id> <enable rc> <disable rc> — a plugin that lists
+# both hooks; each hook logs whether the plugin link exists when it runs
+make_hooked_plugin() {
+  local dir="$1" id="$2"
+  mkdir -p "${dir}/bin"
+  cat > "${dir}/bin/hw-plugin" <<EOF
+#!/usr/bin/env bash
+linked=no; [[ -L "\${HW_PLUGINS_DIR}/${id}" ]] && linked=yes
+case "\$1" in
+  describe) echo '{"id":"${id}","name":"Hooked","version":"1","contract":1,"skills":[],"hooks":["enable","disable"]}' ;;
+  enable) echo "enable linked=\${linked}" >> "${dir}/calls"; echo "re-registering" >&2; exit $3 ;;
+  disable) echo "disable linked=\${linked}" >> "${dir}/calls"; echo "unregistering" >&2; exit $4 ;;
   *) exit 2 ;;
 esac
 EOF
@@ -103,6 +123,37 @@ teardown() {
   run "${plugins}" disable fake
   expect_rc "disabling a disabled plugin -> exit 1" "${status}" nz
   expect_eq "no machines without plugins" "$("${plugins}" machines)" ""
+}
+
+@test "a plugin without hooks is never called to enable or disable" {
+  "${plugins}" enable "${t}/src/fake" >/dev/null
+  "${plugins}" disable fake >/dev/null
+  expect_not_grep "no enable call" "$(cat "${t}/src/fake/calls")" "enable"
+  expect_not_grep "no disable call" "$(cat "${t}/src/fake/calls")" "disable"
+}
+
+@test "hooks: enable runs after the link exists, disable before it goes" {
+  make_hooked_plugin "${t}/src/hooked" hooked 0 0
+  run "${plugins}" enable "${t}/src/hooked"
+  expect_rc "enable exits 0" "${status}" 0
+  expect_grep "the hook's messages pass through" "${output}" "re-registering"
+  run "${plugins}" disable hooked
+  expect_rc "disable exits 0" "${status}" 0
+  expect_grep "the hook's messages pass through" "${output}" "unregistering"
+  expect_eq "order" "$(cat "${t}/src/hooked/calls")" "$(printf 'enable linked=yes\ndisable linked=yes')"
+  expect_file "unlinked after the hook" "${HW_PLUGINS_DIR}/hooked" absent
+}
+
+@test "hooks: a failing hook warns; the plugin is still enabled or disabled" {
+  make_hooked_plugin "${t}/src/hooked" hooked 1 1
+  run "${plugins}" enable "${t}/src/hooked"
+  expect_rc "enable exits 0" "${status}" 0
+  expect_grep "warns" "${output}" "Warning: hooked: its enable step failed"
+  expect_file "still enabled" "${HW_PLUGINS_DIR}/hooked" exists
+  run "${plugins}" disable hooked
+  expect_rc "disable exits 0" "${status}" 0
+  expect_grep "warns" "${output}" "Warning: hooked: its disable step failed"
+  expect_file "still disabled" "${HW_PLUGINS_DIR}/hooked" absent
 }
 
 @test "skill_name (sourced): the frontmatter name, empty without one" {

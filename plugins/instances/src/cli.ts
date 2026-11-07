@@ -215,11 +215,13 @@ export const HW_PLUGIN_HELP = `Usage: hw-plugin describe
        hw-plugin machines
        hw-plugin ensure <name-or-label>
        hw-plugin exec <name-or-label> -- <command> [args...]
+       hw-plugin disable | enable
 
 The herdr-worktree plugin contract (version ${contract.CONTRACT_VERSION}), called by core
 (scripts/lib/plugins.sh). describe and machines print JSON on stdout; exec
 passes the remote command's output and exit status through; messages go to
-stderr.`;
+stderr. disable (before plugins.sh disable) takes the plugin's machines out of
+herdr; enable (after plugins.sh enable) brings those back.`;
 
 /** `hw-plugin …`; returns the exit status. */
 export function hwPluginMain(ctx: Ctx, argv: readonly string[]): number {
@@ -240,6 +242,12 @@ export function hwPluginMain(ctx: Ctx, argv: readonly string[]): number {
       if (arg === undefined || separator !== "--") throw new CliError(HW_PLUGIN_HELP);
       return contract.exec(ctx, arg, command_);
     }
+    case "disable":
+      one(rest, 0);
+      return contract.disable(ctx) ? 0 : 1;
+    case "enable":
+      one(rest, 0);
+      return contract.enable(ctx) ? 0 : 1;
     case "-h":
     case "--help":
     case "help":

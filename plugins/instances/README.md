@@ -16,14 +16,23 @@ that the user runs. It keeps them in a manifest and brings a stopped
 container back when core needs it (ADR-0014, ADR-0018).
 
 Core works without it: with the plugin disabled, `spawn-repo-agent.sh
---machine` and the machine rows of `list-workers.sh` are simply not there.
+--machine` and the machine rows of `list-workers.sh` are simply not there,
+and herdr shows none of its machines.
 
 ## Enable, disable
 
 ```bash
 scripts/plugins.sh enable instances    # npm ci on first use, then .plugins/instances
-scripts/plugins.sh disable instances   # removes the link; containers, volumes, manifest stay
+scripts/plugins.sh disable instances   # takes its machines out of herdr, then removes the link
 ```
+
+Disabling removes each instance's herdr machine and names every container
+still running, with the command that stops it (`docker compose -p <name>
+stop`); the manifest, containers and volumes stay. Enabling again brings
+the same machines back: a stopped container is started and each is
+registered again. One that cannot come back (a remote host that is down)
+is reported with the usual steps and comes back on the next enable or
+`instance ensure` (ADR-0022).
 
 Needs Node.js ≥ 24 (it runs the TypeScript sources directly, without a
 build step) and npm for the one dependency (`yaml`). Inside the instances
@@ -200,10 +209,12 @@ Core finds the plugin through `.plugins/instances` and calls
 
 | Call | Answer |
 |---|---|
-| `describe` | JSON `{id, name, version, contract, skills[]}` |
+| `describe` | JSON `{id, name, version, contract, skills[], hooks}`; `hooks` is `["enable", "disable"]` |
 | `machines` | JSON `[{label, target, dir, registered}]` — every manifest instance, with herdr's current label |
 | `ensure <name-or-label>` | exit 0 when usable; messages on stderr |
 | `exec <name-or-label> -- <cmd> [args...]` | `ssh <name> "cd <dir> && HERDR_ENV=1 <cmd …>"` (each argument quoted); output and exit status pass through; stdin closed |
+| `disable` | removes each instance's herdr machine (its label synced first), records them in `~/.config/herdr-worktree/unregistered.json`, names the containers still running; exit 1 when a machine could not be removed |
+| `enable` | ensures the recorded instances and forgets the ones back; exit 1 when one could not come back (it stays recorded) |
 
 ## Development
 

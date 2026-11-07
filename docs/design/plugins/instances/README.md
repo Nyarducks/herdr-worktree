@@ -254,10 +254,14 @@ run `src/main-*.ts`.
 - **Modules** — `instances.ts` (the operations and label sync) over
   `manifest.ts`, `validate.ts`, `container.ts` (compose, keys, herdr
   server, images), `remote.ts`, `ssh.ts` (probe) and `herdr.ts`.
-- **`contract.ts`** — core's four calls. `ensure` writes only to stderr;
-  `exec` runs `cd <dir> && HERDR_ENV=1 <cmd>` over ssh, each argument
-  quoted, passing output and exit status through. `cli.ts` parses both
-  command lines.
+- **`contract.ts`** — core's four calls and the two hooks. `ensure`
+  writes only to stderr; `exec` runs `cd <dir> && HERDR_ENV=1 <cmd>` over
+  ssh, each argument quoted, passing output and exit status through.
+  `disable` takes each instance's machine out of herdr (after syncing its
+  label, so a rename made in herdr is kept) and records it in
+  `unregistered.json`; `enable` ensures exactly those (ADR-0022). Running
+  containers are only named with their stop command, not stopped.
+  `cli.ts` parses both command lines.
 
 **Why TypeScript here and bash in core.** In shell the feature needed a
 hand-written YAML subset, `jq` for every JSON answer, and stub executables

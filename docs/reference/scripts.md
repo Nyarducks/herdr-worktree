@@ -123,7 +123,8 @@ relative to the plugin), `machines` (JSON `[{label, target, dir,
 registered}]`), `ensure <machine>` (exit 1 with reasons on stderr when it
 cannot be used) and `exec <machine> -- <cmd…>` (runs `<cmd>` in that
 machine's checkout as from a pane there; output and exit status pass
-through). Enabled plugins are symlinks `<checkout>/.plugins/<id>`
+through), plus the optional hooks `enable` and `disable`, called only when
+`describe` lists them in `hooks` (ADR-0022). Enabled plugins are symlinks `<checkout>/.plugins/<id>`
 (git-ignored; `HW_PLUGINS_DIR` overrides).
 
 - `ls` — every plugin under `plugins/` and every enabled one: `id enabled
@@ -139,9 +140,12 @@ through). Enabled plugins are symlinks `<checkout>/.plugins/<id>`
   anything is linked. A skill link is attributed to a plugin by the record
   of the links it made (`.plugins/.<id>.skills`) or by its target (inside
   the plugin's directory), never by its name; another plugin's link of the
-  same name refuses the enable.
-- `disable <id>` — removes the plugin link and its skill links only; what
-  the plugin created stays.
+  same name refuses the enable. Then runs `hw-plugin enable` when listed.
+- `disable <id>` — runs `hw-plugin disable` first when listed (instances:
+  its machines leave herdr), then removes the plugin link and its skill
+  links; the plugin's manifest, containers and volumes stay. A failing
+  hook prints `Warning: <id>: its <hook> step failed` and the plugin is
+  still enabled or disabled.
 - `machines` — `plugin label target` of every machine enabled plugins
   provide; a machine whose label or target holds whitespace, a control
   character or `/` is skipped with a warning.

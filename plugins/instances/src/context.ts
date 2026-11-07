@@ -24,6 +24,8 @@ export interface Paths {
   readonly remotesDir: string;
   /** the label each instance had when the manifest and herdr last agreed */
   readonly labelsFile: string;
+  /** the instances `hw-plugin disable` took out of herdr, for enable */
+  readonly unregisteredFile: string;
   /** the user's ssh config, which includes ours */
   readonly userSshConfig: string;
 }
@@ -61,6 +63,7 @@ export function defaultPaths(env: NodeJS.ProcessEnv = process.env, pluginDir = P
     containersDir: env["HW_CONTAINER_DIR"] ?? join(config, "herdr-worktree", "containers"),
     remotesDir: env["HW_REMOTES_STATE_DIR"] ?? join(config, "herdr-worktree", "remotes"),
     labelsFile: env["HW_LABELS_FILE"] ?? join(config, "herdr-worktree", "labels.json"),
+    unregisteredFile: env["HW_UNREGISTERED_FILE"] ?? join(config, "herdr-worktree", "unregistered.json"),
     userSshConfig: env["HW_USER_SSH_CONFIG"] ?? join(homedir(), ".ssh", "config"),
   };
 }

@@ -52,6 +52,10 @@ export class World {
   dnsFails = new Map<string, string>();
   /** herdr refuses `machine rename` */
   renameFails = false;
+  /** herdr cannot list its machines (its server is down) */
+  listFails = false;
+  /** herdr refuses `machine remove` */
+  removeFails = false;
   /** `compose build` fails (a broken Dockerfile) */
   buildFails = false;
   /** compose projects not made by the plugin: project -> its compose file */
@@ -85,7 +89,7 @@ export class World {
 
   private herdr(args: readonly string[], ok: (s?: string) => RunResult, no: (s?: string) => RunResult): RunResult {
     const [a, b, c, , e] = args;
-    if (a === "machine" && b === "list") return ok(JSON.stringify(this.machines));
+    if (a === "machine" && b === "list") return this.listFails ? no("herdr: server not running") : ok(JSON.stringify(this.machines));
     if (a === "machine" && b === "add") {
       this.machines.push({ id: `id-${c}`, label: e as string, target: c as string, enabled: true });
       return ok();
@@ -96,6 +100,7 @@ export class World {
       return ok();
     }
     if (a === "machine" && b === "remove") {
+      if (this.removeFails) return no("herdr: remove refused");
       this.machines = this.machines.filter((m) => m.id !== c);
       return ok();
     }
@@ -127,6 +132,10 @@ export class World {
   private docker(args: readonly string[], options: RunOptions, ok: (s?: string) => RunResult, no: (s?: string) => RunResult): RunResult {
     if (args[0] === "volume" && args[1] === "ls") {
       return ok([...this.volumes].map(([name, project]) => `${name}\t${project}\n`).join(""));
+    }
+    if (args[0] === "ps" && args.includes("status=running")) {
+      const project = (args.find((a) => a.startsWith("label=com.docker.compose.project=")) ?? "").split("=").at(-1) as string;
+      return ok(this.running.has(project) ? `c-${project}\n` : "");
     }
     if (args[0] === "ps") {
       const filter = args[args.indexOf("--filter") + 1] as string;
@@ -200,6 +209,7 @@ export function setup(): Setup {
     containersDir: join(dir, "containers"),
     remotesDir: join(dir, "remotes"),
     labelsFile: join(dir, "labels.json"),
+    unregisteredFile: join(dir, "unregistered.json"),
     userSshConfig: join(dir, "home", ".ssh", "config"),
   };
   const world = new World();

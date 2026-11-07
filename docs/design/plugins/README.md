@@ -52,7 +52,7 @@ scripts/plugins.sh ls                       # id, enabled, version, path
 scripts/plugins.sh enable instances         # plugins/<id> in this checkout
 scripts/plugins.sh enable ~/src/my-plugin   # or a plugin directory elsewhere
 scripts/plugins.sh machines                 # plugin, label, target of every machine
-scripts/plugins.sh disable instances        # unlink; nothing it created is deleted
+scripts/plugins.sh disable instances        # unlink; its machines leave herdr, nothing is deleted
 ```
 
 `enable`:
@@ -64,7 +64,8 @@ scripts/plugins.sh disable instances        # unlink; nothing it created is dele
 3. refuses a described skill without `SKILL.md`, or one whose name another
    skill already uses — before anything is linked;
 4. links `.plugins/<id>` to the plugin directory and each skill to
-   `.agents/skills/plugin-<id>-<name>` (both git-ignored).
+   `.agents/skills/plugin-<id>-<name>` (both git-ignored);
+5. calls `bin/hw-plugin enable` when `describe` lists that hook.
 
 A skill link belongs to the plugin that made it — not to whatever its name
 starts with, since ids may contain `-` (`a` and `a-b`). `enable` records
@@ -78,8 +79,13 @@ the plugin's directory, now or where `.plugins/<id>` pointed). Another
 plugin's link of the same name, even a dangling one, refuses the enable.
 `ls` names a plugin by its `describe` id, so a plugin enabled by
 path from a directory named otherwise is still listed and disabled by
-its id. `disable` removes those links only. Enabling again picks up whatever the
-plugin kept (its containers, manifest, state).
+its id. `disable` calls `bin/hw-plugin disable` first when `describe`
+lists that hook, then removes those links. Enabling again picks up
+whatever the plugin kept (its containers, manifest, state). A hook that
+fails is a warning; the plugin is still enabled or disabled (ADR-0022).
+The `instances` plugin uses the hooks to take its machines out of herdr
+while it is off and to bring the same ones back, so a disabled plugin
+leaves herdr as it was without plugins.
 
 Enabled plugins are the symlinks in `<checkout>/.plugins/`
 (`HW_PLUGINS_DIR` overrides it; tests use that).
@@ -115,6 +121,8 @@ dispatch, merged with stdout so pane ids can be rewritten to
 | `machines` | JSON array, below | 0; non-zero = this plugin is skipped with a warning | `list-workers.sh`, `spawn-repo-agent.sh --machine`, `plugins.sh machines` |
 | `ensure <machine>` | nothing (messages on stderr) | 0 when the machine is usable now; 1 when it is not, with the reasons or the steps for a human on stderr | before a `--machine` dispatch; when `list-workers.sh` cannot reach a machine |
 | `exec <machine> -- <cmd> [args…]` | `<cmd>`'s own output | `<cmd>`'s exit status; non-zero when the machine cannot be reached | to run `scripts/spawn-repo-agent.sh …` and `scripts/list-workers.sh --local` on the machine |
+| `enable` (optional hook) | nothing (messages on stderr) | non-zero = core warns; the plugin stays enabled | `plugins.sh enable`, after linking, when `describe` lists it |
+| `disable` (optional hook) | nothing (messages on stderr) | non-zero = core warns; the plugin is still disabled | `plugins.sh disable`, before unlinking, when `describe` lists it |
 
 Core resolves the user's `--machine <label-or-target>` against `machines`
 — a machine whose target matches first, else the first whose label
@@ -130,7 +138,8 @@ accept either; the contract only needs the target.
   "name": "Instances: dev containers and remote hosts",
   "version": "0.1.0",
   "contract": 1,
-  "skills": ["skills/instances", "/abs/path/skills/instance-from-repo"]
+  "skills": ["skills/instances", "/abs/path/skills/instance-from-repo"],
+  "hooks": ["enable", "disable"]
 }
 ```
 
@@ -139,6 +148,8 @@ accept either; the contract only needs the target.
 - `contract`: must be `1` for this core.
 - `skills`: skill directories, absolute or relative to the plugin
   directory; `[]` when none.
+- `hooks` (optional): the hooks core calls, from `enable` and `disable`;
+  missing or `[]` when none.
 
 ### `machines`
 
@@ -197,7 +208,8 @@ A skill name must not clash with a core skill or another plugin's.
 ## Testing
 
 - **Contract checks on enable**: `tests/scripts/plugins.bats` covers
-  `plugins.sh` (contract version, skill links and clashes, disable).
+  `plugins.sh` (contract version, skill links and clashes, disable, and
+  the hooks: order, failures, a plugin without them).
 - **Core against a plugin**: `tests/scripts/helpers.bash` has
   `stub_plugin <id>`, an enabled fake plugin whose answers come from files
   (`machines.json`, `ensure-<target>`, `exec-<target>`); see

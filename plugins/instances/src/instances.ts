@@ -121,7 +121,7 @@ export function plannedLabel(plan: LabelPlan, instance: Instance, machine: Machi
  *  the (possibly updated) manifest, and whether herdr refused a rename — then
  *  herdr's label is not what planLabel promised. A refusal is reported, not
  *  thrown, so one machine cannot stop a listing. */
-function syncLabel(ctx: Ctx, manifest: Manifest, instance: Instance): { manifest: Manifest; refused: boolean } {
+export function syncLabel(ctx: Ctx, manifest: Manifest, instance: Instance): { manifest: Manifest; refused: boolean } {
   const machine = machineFor(ctx, instance.name);
   if (machine === undefined) return { manifest, refused: false };
   const plan = planLabel(ctx, manifest, instance, machine);
