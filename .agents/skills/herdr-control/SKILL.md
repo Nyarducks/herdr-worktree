@@ -57,6 +57,30 @@ slug, a tab label, or a pane id the user quotes.
 Only workers in task worktrees are listed; the orchestrator's own pane
 and other agents are excluded on purpose.
 
+### Workers on other machines
+
+When a plugin provides other machines (`scripts/plugins.sh ls` shows it
+enabled — e.g. `instances`: dev containers and remote hosts), the list
+also carries their workers, with `pane_id` written `<label>/<pane>`
+(`hw-a/w2:p3`). Run every operation below on that machine: insert
+`--machine <label>` right after `herdr` and pass the bare `<pane>`:
+
+```bash
+herdr --machine hw-a agent get w2:p3
+herdr --machine hw-a agent prompt w2:p3 "<English instruction>" --wait --until working --until blocked --timeout 120000
+```
+
+Ids are per machine — `w2:p3` here and `hw-a/w2:p3` are different
+workers. A machine's own orchestrator (if one runs there) can steer the
+same workers; check the state before sending so the two do not talk over
+each other. `--local` lists only this herdr's workers.
+
+Managing the machines themselves (which exist, bringing one back,
+renaming, adding a container or a host) belongs to the plugin: its
+skills are listed next to this one once it is enabled (for `instances`:
+the `instances` skill, linked as `.agents/skills/plugin-instances-instances`)
+— use them for such a request.
+
 ## Operations
 
 | User intent | Do |
@@ -99,6 +123,9 @@ and send to each in turn.
 
 ## Notes
 
+- Focus (`agent focus`, `tab focus`) only moves this herdr's view; for a
+  worker on another machine, open that machine in the herdr sidebar
+  instead.
 - The pane id always works; agent names change when a worker renames
   itself, so re-resolve instead of caching names across turns.
 - The user may also type into a worker's pane directly. Avoid prompting

@@ -37,6 +37,14 @@ Never default silently.
 - **Repository** — ask for the repository *name*. Offer the base clones
   already under `repos/` as options; accept a bare name or `owner/name`.
 
+When an enabled plugin provides other machines (`scripts/plugins.sh
+machines`: dev containers, remote hosts), also settle **where** the worker runs: here, or on a named
+machine. If the request names one ("in hw-a", "on the client-B
+container"), use it; if it names none, dispatch here. Ask only when the
+request is ambiguous about it (e.g. the repository is cloned on several
+machines and nothing points to one) — the machines hold different Git
+accounts, so never guess.
+
 ## Precondition
 
 ```bash
@@ -55,7 +63,19 @@ scripts/spawn-repo-agent.sh --kind agy <owner>/<repo> -- "<task>"
 scripts/spawn-repo-agent.sh --kind devin <owner>/<repo> -- "<task>"
 scripts/spawn-repo-agent.sh --model opus --effort high <owner>/<repo> -- "<task>"
 scripts/spawn-repo-agent.sh <[owner/]repo>          # spawn only — worker idles
+scripts/spawn-repo-agent.sh --machine hw-a <[owner/]repo> -- "<task>"   # on another machine
 ```
+
+**Another machine** — needs a plugin that provides machines
+(`scripts/plugins.sh machines` lists them; e.g. `instances`). `--machine
+<label>` (or its target) runs that machine's own `spawn-repo-agent.sh`
+through the plugin, so the clone, the worktree, the Git credentials and
+the worker stay on that machine. The plugin ensures the machine first (a
+stopped container is restarted). Its output reports the pane as
+`<label>/<pane>`; steer it with `herdr --machine <label> …`
+(`herdr-control`). If the dispatch fails with `Action needed on <label>`,
+the machine is a remote host the user must start — relay those steps
+instead of retrying (the plugin's skill says how).
 
 **Model and effort** — when the request names a model or an effort
 level, pass it with `--model <model>` and/or `--effort <level>`; the
@@ -173,7 +193,7 @@ herdr agent prompt "<pane_id>" "<follow-up task>" --wait --timeout 120000
   worktree — those files must be committed in the repo to exist there.
 - The script pre-trusts the worktree so the worker does not stop at a
   first-run confirmation prompt: it registers the path in agy's
-  `trustedWorkspaces` and claude's `~/.claude.json` project trust list
+  `trustedWorkspaces` and claude's `${CLAUDE_CONFIG_DIR:-~}/.claude.json` project trust list
   (also pre-answering "No" to the external CLAUDE.md imports dialog, so
   no `CLAUDE.md` outside the worktree is ever imported) and pi's
   `trust.json` (pi's trust check sees herdr-worktree's `.agents/skills`
