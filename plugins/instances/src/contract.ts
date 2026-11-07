@@ -1,13 +1,14 @@
 // The herdr-worktree plugin contract (version 1): what core calls through
 // bin/hw-plugin. stdout carries JSON (describe, machines) or the remote
 // command's own output (exec); messages go to stderr.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { CliError, type Ctx, PLUGIN_DIR } from "./context.ts";
 import { listMachines, machineFor, removeMachine } from "./herdr.ts";
 import { checkoutDir, ensureOne, planLabel, plannedLabel, resolve, syncLabel } from "./instances.ts";
 import { findInstance, readManifest } from "./manifest.ts";
 import { shellQuote } from "./proc.ts";
+import { readUnregistered, writeUnregistered } from "./unregistered.ts";
 
 export const CONTRACT_VERSION = 1;
 
@@ -79,23 +80,9 @@ export function exec(ctx: Ctx, arg: string, command: readonly string[]): number 
 }
 
 /** What to do when disable could not take every machine out of herdr: core
- *  has unlinked the plugin by then, so disable alone cannot be repeated;
- *  enable brings back what was taken out, and disable takes all out again. */
-const AGAIN = "once herdr works, run: scripts/plugins.sh enable instances && scripts/plugins.sh disable instances";
-
-function readUnregistered(ctx: Ctx): Set<string> {
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(ctx.paths.unregisteredFile, "utf8"));
-    return new Set(Array.isArray(parsed) ? parsed.filter((n): n is string => typeof n === "string") : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function writeUnregistered(ctx: Ctx, names: ReadonlySet<string>): void {
-  mkdirSync(dirname(ctx.paths.unregisteredFile), { recursive: true });
-  writeFileSync(ctx.paths.unregisteredFile, `${JSON.stringify([...names].sort())}\n`);
-}
+ *  has unlinked the plugin by then, but its own bin still answers, and
+ *  disable takes the rest out without starting anything. */
+const AGAIN = "once herdr works, run: plugins/instances/bin/hw-plugin disable";
 
 function isRunning(ctx: Ctx, name: string): boolean {
   const result = ctx.run("docker", ["ps", "-q", "--filter", `label=com.docker.compose.project=${name}`, "--filter", "status=running"]);
@@ -143,14 +130,19 @@ export function disable(ctx: Ctx): boolean {
 
 /** `plugins.sh enable`: bring back (ensure: start, register) the machines
  *  disable took out of herdr. One that cannot come back is reported and kept
- *  for the next enable; returns false then. */
+ *  for the next enable, and makes it return false; a name this manifest does
+ *  not know (another checkout's) is kept as it is. */
 export function enable(ctx: Ctx): boolean {
   const names = readUnregistered(ctx);
   if (names.size === 0) return true;
   const manifest = readManifest(ctx);
   const left = new Set<string>();
   for (const name of names) {
-    if (findInstance(manifest, name) === undefined) continue; // removed meanwhile
+    // another checkout's manifest; `instance rm` forgets its own names
+    if (findInstance(manifest, name) === undefined) {
+      left.add(name);
+      continue;
+    }
     let done = false;
     try {
       done = ensureOne({ ...ctx, out: ctx.err }, name);
@@ -161,5 +153,5 @@ export function enable(ctx: Ctx): boolean {
     if (!done) left.add(name);
   }
   writeUnregistered(ctx, left);
-  return left.size === 0;
+  return [...left].every((name) => findInstance(manifest, name) === undefined);
 }

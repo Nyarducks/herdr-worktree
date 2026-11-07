@@ -701,7 +701,8 @@ describe("plugin disable and enable", () => {
     world.err.length = 0;
     world.listFails = true;
     assert.equal(contract.disable(ctx), false);
-    const again = /scripts\/plugins\.sh enable instances && scripts\/plugins\.sh disable instances/;
+    // the plugin is unlinked by then; its own bin still works and starts nothing
+    const again = /once herdr works, run: plugins\/instances\/bin\/hw-plugin disable$/m;
     assert.match(world.err.join("\n"), /cannot read herdr's machines/);
     assert.match(world.err.join("\n"), again, "a sequence that works once the plugin is unlinked");
     world.listFails = false;
@@ -724,5 +725,27 @@ describe("plugin disable and enable", () => {
     world.probe.set("box", "ok");
     assert.equal(contract.enable(ctx), true);
     assert.deepEqual(world.machines.map((m) => m.target), ["box"]);
+  });
+
+  it("enable from a checkout whose manifest lacks a recorded instance keeps it recorded", () => {
+    const { world, ctx, dir } = setup();
+    instances.add(ctx, "container", "hw-a", undefined, { port: 2301 });
+    contract.disable(ctx);
+    const other = { ...ctx, paths: { ...ctx.paths, manifestFile: join(dir, "other-checkout.yml") } };
+    assert.equal(contract.enable(other), true);
+    assert.equal(world.machines.length, 0, "nothing of another manifest is brought back");
+    assert.equal(contract.enable(ctx), true);
+    assert.deepEqual(world.machines.map((m) => m.target), ["hw-a"], "the record survived the other checkout's enable");
+  });
+
+  it("rm of a recorded instance drops it from the record", () => {
+    const { world, ctx, paths } = setup();
+    instances.add(ctx, "container", "hw-a", undefined, { port: 2301 });
+    instances.add(ctx, "container", "hw-b", undefined, { port: 2302 });
+    contract.disable(ctx);
+    instances.remove(ctx, "hw-a", false);
+    assert.deepEqual(JSON.parse(readFileSync(paths.unregisteredFile, "utf8")), ["hw-b"]);
+    contract.enable(ctx);
+    assert.deepEqual(world.machines.map((m) => m.target), ["hw-b"]);
   });
 });

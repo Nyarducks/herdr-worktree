@@ -253,13 +253,16 @@ run `src/main-*.ts`.
   an environment variable), `out` for results, `err` for messages, `sleep`.
 - **Modules** — `instances.ts` (the operations and label sync) over
   `manifest.ts`, `validate.ts`, `container.ts` (compose, keys, herdr
-  server, images), `remote.ts`, `ssh.ts` (probe) and `herdr.ts`.
+  server, images), `remote.ts`, `ssh.ts` (probe), `herdr.ts` and
+  `unregistered.ts` (the record `disable` writes for `enable`).
 - **`contract.ts`** — core's four calls and the two hooks. `ensure`
   writes only to stderr; `exec` runs `cd <dir> && HERDR_ENV=1 <cmd>` over
   ssh, each argument quoted, passing output and exit status through.
   `disable` takes each instance's machine out of herdr (after syncing its
   label, so a rename made in herdr is kept) and records it in
-  `unregistered.json`; `enable` ensures exactly those (ADR-0022). Running
+  `unregistered.json`; `enable` ensures exactly those, keeping a name its
+  manifest does not know (the record is shared by every checkout), and
+  `instance rm` drops its name (ADR-0022). Running
   containers are only named with their stop command, not stopped.
   `cli.ts` parses both command lines.
 

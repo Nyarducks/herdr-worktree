@@ -170,6 +170,18 @@ teardown() {
   expect_not_grep "no disable call" "$(cat "${t}/src/hooked/calls")" "disable"
 }
 
+@test "disable of a plugin whose directory is gone just unlinks, silently" {
+  make_hooked_plugin "${t}/src/hooked" hooked 0 0
+  "${plugins}" enable "${t}/src/hooked" >/dev/null 2>&1
+  mv "${t}/src/hooked" "${t}/src/moved"
+  run "${plugins}" disable hooked
+  expect_rc "disable exits 0" "${status}" 0
+  expect_not_grep "no warning" "${output}" "Warning:"
+  expect_not_grep "no error from bash" "${output}" "No such file"
+  expect_file "unlinked" "${HW_PLUGINS_DIR}/hooked" absent
+  expect_not_grep "no disable call" "$(cat "${t}/src/moved/calls")" "disable"
+}
+
 @test "skill_name (sourced): the frontmatter name, empty without one" {
   # shellcheck source=scripts/plugins.sh
   source "${repo_root}/scripts/plugins.sh"

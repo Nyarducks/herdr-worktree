@@ -20,6 +20,7 @@ import {
   writeManifest,
 } from "./manifest.ts";
 import { guidance, remoteAddress, removeRemoteSshConfig, writeRemoteSshConfig } from "./remote.ts";
+import { forgetUnregistered } from "./unregistered.ts";
 import { ensureInclude, probe, type Probe, probeWord } from "./ssh.ts";
 import { dirProblem, hostProblem, identityProblem, labelProblem, nameProblem, portProblem, userProblem } from "./validate.ts";
 
@@ -453,6 +454,7 @@ export function remove(ctx: Ctx, arg: string, purge: boolean): { readonly name: 
     if (!(error instanceof CliError) || !purge || nameProblem(arg) !== undefined || container.readState(ctx, arg) === undefined) throw error;
     container.down(ctx, arg, true);
     recordAgreed(ctx, arg, undefined);
+    forgetUnregistered(ctx, arg);
     return { name: arg, kind: "container", inManifest: false };
   }
   // the label of a live instance that is also the name of a container kept
@@ -469,5 +471,6 @@ export function remove(ctx: Ctx, arg: string, purge: boolean): { readonly name: 
   if (machine !== undefined) removeMachine(ctx, machine.id);
   writeManifest(ctx, withoutInstance(manifest, instance.name));
   recordAgreed(ctx, instance.name, undefined);
+  forgetUnregistered(ctx, instance.name);
   return { name: instance.name, kind: instance.kind, inManifest: true };
 }
