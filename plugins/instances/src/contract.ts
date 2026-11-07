@@ -78,6 +78,11 @@ export function exec(ctx: Ctx, arg: string, command: readonly string[]): number 
   return ctx.run("ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", instance.name, remote], { output: "inherit" }).code;
 }
 
+/** What to do when disable could not take every machine out of herdr: core
+ *  has unlinked the plugin by then, so disable alone cannot be repeated;
+ *  enable brings back what was taken out, and disable takes all out again. */
+const AGAIN = "once herdr works, run: scripts/plugins.sh enable instances && scripts/plugins.sh disable instances";
+
 function readUnregistered(ctx: Ctx): Set<string> {
   try {
     const parsed: unknown = JSON.parse(readFileSync(ctx.paths.unregisteredFile, "utf8"));
@@ -106,8 +111,7 @@ export function disable(ctx: Ctx): boolean {
   let manifest = readManifest(ctx);
   const listed = ctx.run("herdr", ["machine", "list", "--json"]);
   if (listed.code !== 0) {
-    const names = manifest.instances.map((i) => `${i.name}'s machine`).join(", ");
-    ctx.err(`Error: cannot read herdr's machines (${listed.stderr.trim() || "herdr failed"}); start herdr and disable again, or remove ${names} in herdr`);
+    ctx.err(`Error: cannot read herdr's machines (${listed.stderr.trim() || "herdr failed"}); ${AGAIN}`);
     return false;
   }
   const removed = readUnregistered(ctx);
@@ -121,7 +125,7 @@ export function disable(ctx: Ctx): boolean {
       removeMachine(ctx, machine.id);
     } catch (error) {
       if (!(error instanceof CliError)) throw error;
-      ctx.err(`Error: ${listedInstance.name}: ${error.message}; remove it in herdr`);
+      ctx.err(`Error: ${listedInstance.name}: ${error.message}; ${AGAIN}`);
       ok = false;
       continue;
     }

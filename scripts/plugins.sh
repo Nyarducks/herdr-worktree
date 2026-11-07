@@ -259,9 +259,17 @@ cmd_disable() {
   local link
   link="$(hw_plugins_root)/$1"
   [[ -L "${link}" ]] || hw_die "plugin '$1' is not enabled (see: plugins.sh ls)"
-  local dir
+  local dir json
   dir="$(plugin_dir_of "${link}")"
-  run_hook "$1" "${dir}" "$("${dir}/bin/hw-plugin" describe </dev/null 2>/dev/null)" disable
+  # a dangling link (the plugin moved away) has nothing to ask; a plugin
+  # that is there but cannot describe itself (no Node.js) is a warning
+  if [[ -x "${dir}/bin/hw-plugin" ]]; then
+    if json="$("${dir}/bin/hw-plugin" describe </dev/null)"; then
+      run_hook "$1" "${dir}" "${json}" disable
+    else
+      echo "Warning: $1: cannot ask it for its disable step (describe failed, see above); what it registered elsewhere (herdr machines) may remain" >&2
+    fi
+  fi
   unlink_skills "$1" "${dir}"
   rm -f "${link}"
   echo "$1: disabled (its manifest, containers and volumes are kept; enable it again to use them)"

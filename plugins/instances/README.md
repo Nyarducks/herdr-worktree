@@ -213,7 +213,7 @@ Core finds the plugin through `.plugins/instances` and calls
 | `machines` | JSON `[{label, target, dir, registered}]` — every manifest instance, with herdr's current label |
 | `ensure <name-or-label>` | exit 0 when usable; messages on stderr |
 | `exec <name-or-label> -- <cmd> [args...]` | `ssh <name> "cd <dir> && HERDR_ENV=1 <cmd …>"` (each argument quoted); output and exit status pass through; stdin closed |
-| `disable` | removes each instance's herdr machine (its label synced first), records them in `~/.config/herdr-worktree/unregistered.json`, names the containers still running; exit 1 when a machine could not be removed |
+| `disable` | removes each instance's herdr machine (its label synced first), records them in `~/.config/herdr-worktree/unregistered.json`, names the containers still running; exit 1 when herdr's machines cannot be listed or one cannot be removed, with the commands to run once herdr works |
 | `enable` | ensures the recorded instances and forgets the ones back; exit 1 when one could not come back (it stays recorded) |
 
 ## Development

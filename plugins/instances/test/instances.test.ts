@@ -701,12 +701,15 @@ describe("plugin disable and enable", () => {
     world.err.length = 0;
     world.listFails = true;
     assert.equal(contract.disable(ctx), false);
-    assert.match(world.err.join("\n"), /cannot read herdr's machines .*remove hw-a's machine in herdr/);
+    const again = /scripts\/plugins\.sh enable instances && scripts\/plugins\.sh disable instances/;
+    assert.match(world.err.join("\n"), /cannot read herdr's machines/);
+    assert.match(world.err.join("\n"), again, "a sequence that works once the plugin is unlinked");
     world.listFails = false;
     world.removeFails = true;
     world.err.length = 0;
     assert.equal(contract.disable(ctx), false);
     assert.match(world.err.join("\n"), /hw-a: could not remove herdr machine id-hw-a/);
+    assert.match(world.err.join("\n"), again);
     assert.equal(world.machines.length, 1);
   });
 

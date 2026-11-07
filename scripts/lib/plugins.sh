@@ -5,10 +5,11 @@
 # A plugin is a directory with an executable bin/hw-plugin that speaks the
 # contract (version 1):
 #
-#   hw-plugin describe            JSON {id, name, version, contract, skills[]}:
-#                                 skills are skill directories (each with a
-#                                 SKILL.md), absolute or relative to the
-#                                 plugin directory
+#   hw-plugin describe            JSON {id, name, version, contract, skills[],
+#                                 hooks}: skills are skill directories (each
+#                                 with a SKILL.md), absolute or relative to
+#                                 the plugin directory; hooks (optional)
+#                                 lists "enable" and/or "disable"
 #   hw-plugin machines            JSON [{label, target, dir, registered}]: the
 #                                 other machines workers can run on
 #   hw-plugin ensure <machine>    bring it into use; exit 1 (reasons on
@@ -17,6 +18,11 @@
 #                                 run <cmd> in that machine's herdr-worktree
 #                                 checkout as from a pane there; its output
 #                                 and exit status pass through
+#   hw-plugin enable | disable    optional hooks, called by scripts/plugins.sh
+#                                 after enabling / before disabling when
+#                                 describe lists them; messages on stderr;
+#                                 non-zero makes core warn, and the plugin is
+#                                 enabled / disabled anyway (ADR-0022)
 #
 # A plugin is enabled by a symlink <checkout>/.plugins/<id> -> its directory
 # (git-ignored; scripts/plugins.sh manages them; HW_PLUGINS_DIR overrides).

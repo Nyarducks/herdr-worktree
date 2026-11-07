@@ -44,7 +44,9 @@ make_hooked_plugin() {
 #!/usr/bin/env bash
 linked=no; [[ -L "\${HW_PLUGINS_DIR}/${id}" ]] && linked=yes
 case "\$1" in
-  describe) echo '{"id":"${id}","name":"Hooked","version":"1","contract":1,"skills":[],"hooks":["enable","disable"]}' ;;
+  describe)
+    if [[ -e "${dir}/broken" ]]; then echo "needs Node.js >= 24" >&2; exit 1; fi
+    echo '{"id":"${id}","name":"Hooked","version":"1","contract":1,"skills":[],"hooks":["enable","disable"]}' ;;
   enable) echo "enable linked=\${linked}" >> "${dir}/calls"; echo "re-registering" >&2; exit $3 ;;
   disable) echo "disable linked=\${linked}" >> "${dir}/calls"; echo "unregistering" >&2; exit $4 ;;
   *) exit 2 ;;
@@ -154,6 +156,18 @@ teardown() {
   expect_rc "disable exits 0" "${status}" 0
   expect_grep "warns" "${output}" "Warning: hooked: its disable step failed"
   expect_file "still disabled" "${HW_PLUGINS_DIR}/hooked" absent
+}
+
+@test "disable warns when a plugin cannot describe itself, and still disables" {
+  make_hooked_plugin "${t}/src/hooked" hooked 0 0
+  "${plugins}" enable "${t}/src/hooked" >/dev/null 2>&1
+  touch "${t}/src/hooked/broken"
+  run "${plugins}" disable hooked
+  expect_rc "disable exits 0" "${status}" 0
+  expect_grep "describe's reason shown" "${output}" "needs Node.js >= 24"
+  expect_grep "warns" "${output}" "Warning: hooked: cannot ask it for its disable step"
+  expect_file "still disabled" "${HW_PLUGINS_DIR}/hooked" absent
+  expect_not_grep "no disable call" "$(cat "${t}/src/hooked/calls")" "disable"
 }
 
 @test "skill_name (sourced): the frontmatter name, empty without one" {

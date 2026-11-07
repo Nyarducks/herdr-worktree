@@ -51,8 +51,16 @@ saw, and was connected to, the plugin's containers and hosts.
 
 - With the plugin disabled, neither core nor herdr shows its machines, as
   with v1.0. Enabling it again restores the machines that were there.
-- Disabling needs herdr running to remove the machines. Without it,
-  disable warns with the machines to remove by hand, and still unlinks.
+- Disabling needs herdr running to remove the machines. Without it, the
+  hook fails and core still unlinks the plugin, so disable alone cannot
+  be repeated; the hook says to run `scripts/plugins.sh enable instances
+  && scripts/plugins.sh disable instances` once herdr works (enable has
+  nothing to bring back then, or brings back what was taken out, and
+  disable takes every machine out). The same holds for a machine herdr
+  refuses to remove.
+- A plugin that is there but cannot answer `describe` at disable time
+  (Node.js missing) gets no disable call; core warns that what it
+  registered elsewhere may remain.
 - The record lives outside the checkout, with the plugin's other state;
   removing an instance (`instance rm`) while disabled drops it from the
   next enable.

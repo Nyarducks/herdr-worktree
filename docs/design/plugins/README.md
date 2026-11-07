@@ -83,6 +83,9 @@ its id. `disable` calls `bin/hw-plugin disable` first when `describe`
 lists that hook, then removes those links. Enabling again picks up
 whatever the plugin kept (its containers, manifest, state). A hook that
 fails is a warning; the plugin is still enabled or disabled (ADR-0022).
+A plugin that is there but cannot answer `describe` at disable time (its
+runtime is missing) gets no disable call, and core warns that what it
+registered elsewhere may remain.
 The `instances` plugin uses the hooks to take its machines out of herdr
 while it is off and to bring the same ones back, so a disabled plugin
 leaves herdr as it was without plugins.
