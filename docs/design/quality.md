@@ -201,8 +201,9 @@ Runner images and action versions live in the workflow file only.
   grouped). The bats tag in the workflow, the shellcheck release in
   `lint.sh`'s install hint and `flake.lock` are bumped by hand.
 - **Inside a container.** The plugin's default image installs bats, and
-  `instance check <container>` runs each `tests/scripts/*.bats` and
-  `tests/scripts/lib/*.bats` in the container's checkout over ssh,
+  `instance check <container>` runs each `tests/scripts/*.bats`,
+  `tests/scripts/lib/*.bats` and `tests/plugins/*/*.bats` in the
+  container's checkout over ssh,
   reporting ok or fail per file next to its tool and herdr checks. That
   shows the suite passes where workers run
   ([../../plugins/instances/README.md](../../plugins/instances/README.md)).

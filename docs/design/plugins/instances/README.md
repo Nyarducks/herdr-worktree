@@ -302,8 +302,11 @@ no Docker. Core's side uses a fake plugin (`stub_plugin` in
 `tests/scripts/helpers.bash`).
 
 A real container is checked with `instance check <name>`: tool versions,
-the herdr server and workspace, every `tests/scripts/*.bats` and
-`tests/scripts/lib/*.bats` run inside, and herdr's forwarding.
+the herdr server and workspace, every `tests/scripts/*.bats`,
+`tests/scripts/lib/*.bats` and `tests/plugins/*/*.bats` run inside, and
+herdr's forwarding. The entrypoint gives the state volume to the user's
+uid and gid: Ubuntu 26.04's uutils `chown` leaves the group alone on
+`user:`.
 
 ## References
 

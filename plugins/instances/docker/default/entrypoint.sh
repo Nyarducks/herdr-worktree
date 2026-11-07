@@ -70,11 +70,14 @@ merge_into() {
 # after its child was kept (.local after .local/state/nix) is still a first
 # use: merged in, not deleted.
 link_persisted() {
-  local user="${HW_USER:-dev}" home store store_real linked
-  home="$(getent passwd "${user}" | cut -d: -f6)"
+  local user="${HW_USER:-dev}" entry home owner store store_real linked
+  entry="$(getent passwd "${user}")"
+  home="$(cut -d: -f6 <<< "${entry}")"
+  # user:gid, never `user:`: uutils chown (Ubuntu 26.04) leaves the group
+  owner="${user}:$(cut -d: -f4 <<< "${entry}")"
   store="${home}/.persist"
   [[ -d "${store}" ]] || return 0
-  chown "${user}:" "${store}"
+  chown "${owner}" "${store}"
   store_real="$(cd "${store}" && pwd -P)"
   linked="${store}/persist.linked"
   local list rel src dst parent first rels=()
@@ -151,7 +154,7 @@ link_persisted() {
     fi
     record_linked "${linked}" "${rel}"
   done < <(printf '%s\n' "${rels[@]}" | LC_ALL=C sort -u)
-  if [[ -e "${linked}" ]]; then chown "${user}:" "${linked}"; fi
+  if [[ -e "${linked}" ]]; then chown "${owner}" "${linked}"; fi
 }
 
 # record_linked <file> <rel> — note that rel has had its first use. A

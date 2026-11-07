@@ -321,7 +321,8 @@ export interface CheckLine {
 }
 
 /** The smoke checks over ssh: tools, the herdr server and workspace, the
- *  checkout's shell tests, and herdr's forwarding once registered. */
+ *  checkout's shell tests (core's and every plugin's), and herdr's
+ *  forwarding once registered. */
 const CHECK_SCRIPT = `set -u
 for tool in git gh jq herdr nix node docker bats; do
   if v="$(\${tool} --version 2>/dev/null | head -1)"; then echo "ok   \${tool}: \${v}"; else echo "fail \${tool}: not found"; fi
@@ -329,7 +330,7 @@ done
 if herdr status server --json 2>/dev/null | jq -e .running >/dev/null; then echo "ok   herdr server running"; else echo "fail herdr server not running"; fi
 if herdr workspace list 2>/dev/null | jq -e '.result.workspaces[] | select(.label == "herdr-worktree")' >/dev/null; then echo "ok   herdr-worktree workspace"; else echo "fail herdr-worktree workspace missing"; fi
 cd ~/herdr-worktree || { echo "fail checkout missing"; exit 0; }
-for t in tests/scripts/*.bats tests/scripts/lib/*.bats; do
+for t in tests/scripts/*.bats tests/scripts/lib/*.bats tests/plugins/*/*.bats; do
   if bats "\${t}" >/dev/null 2>&1; then echo "ok   \${t}"; else echo "fail \${t}"; fi
 done`;
 

@@ -13,7 +13,7 @@ setup() {
   home="${t}/home"
   mkdir -p "${home}/.persist"
   printf '#!/usr/bin/env bash\necho "dev:x:1000:1000::%s:/bin/bash"\n' "${home}" > "${stub_bin}/getent"
-  printf '#!/usr/bin/env bash\nexit 0\n' > "${stub_bin}/chown"
+  printf '#!/usr/bin/env bash\necho "$*" >> "%s/chown.log"\n' "${t}" > "${stub_bin}/chown"
   # runuser -u <user> -- <command…>
   printf '#!/usr/bin/env bash\nshift 3\nexec "$@"\n' > "${stub_bin}/runuser"
   chmod +x "${stub_bin}/getent" "${stub_bin}/chown" "${stub_bin}/runuser"
@@ -35,6 +35,14 @@ teardown() {
   expect_eq "moved in" "$(cat "${home}/.persist/.config/gh/hosts.yml")" "token"
   link_persisted
   expect_eq "a second start keeps it" "$(cat "${home}/.config/gh/hosts.yml")" "token"
+}
+
+@test "the volume and the record are given to the user and the user's group" {
+  printf '.claude\n' > "${HW_PERSIST_LIST}"
+  link_persisted
+  # uutils chown (Ubuntu 26.04) leaves the group alone on `user:`
+  expect_eq "both chowned with the gid" "$(sort -u "${t}/chown.log")" \
+    "$(printf 'dev:1000 %s\ndev:1000 %s' "${home}/.persist" "${home}/.persist/persist.linked" | sort -u)"
 }
 
 @test "a path under one already kept is skipped, never deleted" {

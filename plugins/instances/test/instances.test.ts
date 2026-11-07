@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { CliError } from "../src/context.ts";
+import * as container from "../src/container.ts";
 import * as instances from "../src/instances.ts";
 import { readManifest, writeManifest } from "../src/manifest.ts";
 import { hasInclude, probeWord } from "../src/ssh.ts";
@@ -34,6 +35,18 @@ describe("containers", () => {
     assert.match(readFileSync(join(paths.containersDir, "hw-a", "ssh_config"), "utf8"), /Host hw-a\n {4}HostName 127\.0\.0\.1\n {4}Port 2301/);
     assert.equal(readFileSync(paths.userSshConfig, "utf8").split("\n")[0], `Include ${paths.containersDir}/ssh_config`);
     assert.match(readFileSync(paths.manifestFile, "utf8"), /# Fields and examples/, "the first manifest is a copy of the example");
+  });
+
+  it("check runs the core's and every plugin's shell tests inside", () => {
+    const { world, ctx } = setup();
+    instances.add(ctx, "container", "hw-a", undefined, { port: 2301 });
+    container.check(ctx, "hw-a");
+    const call = world.find("ssh", "hw-a", "bats")[0];
+    assert.ok(call, "the check script went over ssh");
+    const script = call.args.at(-1) ?? "";
+    for (const glob of ["tests/scripts/*.bats", "tests/scripts/lib/*.bats", "tests/plugins/*/*.bats"]) {
+      assert.ok(script.includes(glob), `runs ${glob}`);
+    }
   });
 
   it("add gives each container its own port and refuses a port another container uses", () => {
