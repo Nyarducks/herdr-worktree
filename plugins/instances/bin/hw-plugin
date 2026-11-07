@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# bin/hw-plugin — runs src/main-hw-plugin.ts with Node.js (>= 24 runs TypeScript
+# by stripping types; no build step). Reached through the .plugins/<id>
+# symlink too, so the directory is resolved physically.
+set -euo pipefail
+dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+command -v node >/dev/null 2>&1 || { echo "Error: node (>= 24) not found on PATH; the instances plugin needs it." >&2; exit 1; }
+major="$(node -p 'process.versions.node.split(".")[0]')"
+[[ "${major}" -ge 24 ]] || { echo "Error: node $(node --version) is too old; the instances plugin needs >= 24." >&2; exit 1; }
+[[ -d "${dir}/node_modules/yaml" ]] || { echo "Error: dependencies missing; run: (cd ${dir} && npm ci --omit=dev)" >&2; exit 1; }
+exec node --disable-warning=ExperimentalWarning "${dir}/src/main-hw-plugin.ts" "$@"
