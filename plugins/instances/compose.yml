@@ -1,0 +1,49 @@
+# herdr-worktree development container (the instances plugin; see README.md).
+# Driven by bin/instance, which sets the variables below and writes the ssh
+# public key in (exec stdin): nothing from the host is bind-mounted, so the
+# Docker VM does not need the home directory.
+#
+# Variables (all set by bin/instance):
+#   HW_CORE_DIR   the herdr-worktree checkout: the build context, copied into
+#                 the image at ~/herdr-worktree
+#   HW_IMAGE_DIR  docker/<image>/: its Dockerfile, and the `image` build
+#                 context its COPY --from=image lines read (sshd_config,
+#                 persist, entrypoint.sh) — so a copy works anywhere
+#   HW_SSH_PORT   SSH port on 127.0.0.1
+#   HW_DOCKER=1 with HW_RUNTIME=sysbox-runc: a Docker daemon inside (ADR-0017)
+services:
+  dev:
+    build:
+      context: ${HW_CORE_DIR:?set by bin/instance}
+      dockerfile: ${HW_IMAGE_DIR:?set by bin/instance}/Dockerfile
+      additional_contexts:
+        image: ${HW_IMAGE_DIR:?set by bin/instance}
+      args:
+        USERNAME: dev
+    hostname: herdr-worktree
+    restart: unless-stopped
+    # sysbox-runc runs a Docker daemon inside without --privileged (ADR-0017)
+    runtime: ${HW_RUNTIME:-runc}
+    environment:
+      HW_DOCKER: ${HW_DOCKER:-0}
+    ports:
+      - "127.0.0.1:${HW_SSH_PORT:-2222}:22"
+    volumes:
+      - ssh-host-keys:/etc/ssh/host_keys
+      - repos:/home/dev/herdr-worktree/repos
+      - worktree:/home/dev/herdr-worktree/worktree
+      # logins and settings: the paths in docker/<image>/persist are linked
+      # into this one volume (add a CLI there, not a volume here)
+      - state:/home/dev/.persist
+      # the Nix store: `nix develop` downloads once per instance
+      - nix:/nix
+      # the inner Docker's images and containers (HW_DOCKER=1)
+      - docker:/var/lib/docker
+
+volumes:
+  ssh-host-keys:
+  repos:
+  worktree:
+  state:
+  nix:
+  docker:

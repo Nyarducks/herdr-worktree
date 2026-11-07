@@ -1,0 +1,22 @@
+{
+  "name": "@herdr-worktree/instances",
+  "version": "0.1.0",
+  "private": true,
+  "description": "herdr-worktree plugin: instances (dev containers and remote hosts) for multi-instance dispatch",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --disable-warning=ExperimentalWarning test/*.test.ts",
+    "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

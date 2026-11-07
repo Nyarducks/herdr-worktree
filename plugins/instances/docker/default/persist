@@ -1,0 +1,22 @@
+# Paths under the working user's home kept in the instance's one state volume
+# (mounted at ~/.persist) across rebuilds: logins and settings. One directory
+# per line, relative to the home directory (a file is refused: list its
+# directory); `#` starts a comment.
+#
+# At every container start the entrypoint makes each path a symlink into the
+# volume (moving what the image put there on first use; afterwards the
+# volume's copy wins). A path under one already listed is kept already; a
+# parent added later is merged in on its first use. A path that no tool uses
+# yet costs nothing, so the agent CLIs herdr-worktree can dispatch are listed
+# ahead of time.
+#
+# To keep one more path in a single instance without rebuilding, add it to
+# ~/.persist/persist.list inside that instance; it applies on the next start
+# (the container's next start: plugins/instances/bin/instance ensure after it stopped, or rebuild).
+.config     # gh, herdr and other XDG tools
+.claude     # Claude Code (CLAUDE_CONFIG_DIR points here)
+.codex      # Codex (CODEX_HOME's default)
+.gemini     # Gemini and Antigravity CLIs
+.pi         # pi
+.local/state/nix  # Nix profiles: they must match the store in the nix volume
+.cache/nix        # Nix fetcher cache (flake sources): `nix develop` skips re-unpacking

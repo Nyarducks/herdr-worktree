@@ -3,9 +3,9 @@ type: Design Doc
 title: Orchestration — Orchestrator and Worker lifecycle
 description: How the orchestrator dispatches, monitors, and steers workers through herdr; worker lifecycle and ownership.
 status: current
-last_modified: 2026-11-04
+last_modified: 2026-11-06
 tags: [orchestrator, herdr, dispatch, worker]
-sources: [scripts/spawn-repo-agent.sh, scripts/list-workers.sh, .agents/skills/worktree-development/SKILL.md, .agents/skills/herdr-control/SKILL.md]
+sources: [scripts/spawn-repo-agent.sh, scripts/list-workers.sh, scripts/lib/plugins.sh, scripts/plugins.sh, scripts/lib/repo.sh, .agents/skills/worktree-development/SKILL.md, .agents/skills/herdr-control/SKILL.md]
 ---
 
 # Orchestration
@@ -28,7 +28,7 @@ sequenceDiagram
 
     H->>O: "do task X in repo R"
     O->>H: confirm agent kind + repo via ask-question tool<br/>(only when the request omits them)
-    O->>G: create-worktree.sh --detach → worktree/R/task/<uuid><br/>(detached HEAD at origin/main)
+    O->>G: create-worktree.sh --detach → worktree/R/task/<uuid><br/>(detached HEAD at origin/main or master)
     O->>R: workspace get/create (label = repo)<br/>tab create → pane
     O->>R: agent start — agent in the tab's pane, cwd=worktree
     O->>R: agent prompt — task + self-name preamble,<br/>or standby contract when no task given
@@ -52,7 +52,7 @@ Key decisions (see ADR-0003, ADR-0004, ADR-0008, ADR-0009, ADR-0010, ADR-0012):
   The worker knows nothing about herdr-worktree — the preamble is the whole
   contract.
 - **Detached start**: task worktrees begin on a detached HEAD at
-  `origin/main`; a branch is named only once the work — and its slug —
+  `origin/main` (`origin/master` for a repo without main); a branch is named only once the work — and its slug —
   is known (see ADR-0002).
 - **Ask before dispatch**: when the request omits the agent kind or the
   repository, the orchestrator asks the user through its ask-question
@@ -143,6 +143,49 @@ The resolved pane id drives `herdr agent focus` (show the worker's pane),
 without asking, and a blocked worker's dialog is never answered by the
 orchestrator.
 
+## Several machines
+
+With a plugin that provides machines (ADR-0018; the `instances` plugin:
+dev containers and remote hosts), herdr drives other machines, each
+running its own headless herdr server and its own herdr-worktree
+checkout. Without one, core works on this machine only. Any orchestrator can
+steer any worker: the host's, or one running inside a machine.
+
+```mermaid
+flowchart LR
+    HO[host orchestrator] -->|spawn --machine hw-a<br/>list-workers over ssh| HWA
+    HO -->|herdr --machine hw-a agent| HWA
+    subgraph HWA[machine hw-a]
+      MO[hw-a orchestrator] -->|spawn, list-workers --local,<br/>herdr agent| W[worker]
+    end
+```
+
+- **Dispatch** — `spawn-repo-agent.sh --machine <m>` runs `<m>`'s own
+  script through the plugin's `exec`, so the clone, worktree, credentials and worker live
+  on `<m>`, exactly as if `<m>`'s orchestrator had dispatched it.
+- **Resolve** — the host's `list-workers.sh` adds each machine's
+  `list-workers.sh --local` rows as `<m>/<pane>`; a machine's own
+  orchestrator lists its workers as plain `<pane>`.
+- **Steer** — `herdr --machine <m> agent … <pane>` from the host, plain
+  `herdr agent … <pane>` on `<m>`. Ids are per machine.
+- **Keep them up** — dispatch and listing call the plugin's `ensure` on a
+  machine that does not answer. The `instances` plugin keeps its machines
+  in a git-ignored manifest (ADR-0014): a container is restarted without a
+  rebuild; a remote host is the human's to start, so the orchestrator
+  relays the printed steps.
+- **Names** — an instance's name (ssh alias, herdr target) is fixed; its
+  herdr label is what the human sees and may rename. Rows and hints use
+  the current label; the plugin finds the machine by target.
+- **Skills** — managing the machines themselves is the plugin's: enabling
+  it links its skills into `.agents/skills` as `plugin-<id>-<name>`
+  (ADR-0019), so the orchestrator picks them from their descriptions the
+  same way it picks core's.
+
+Both sides see the same worker, so the rule from "Steering a worker"
+applies across machines: check the state before prompting and do not
+prompt concurrently. Workers stay on their machine; nothing is copied
+between machines (credentials included — each machine logs in itself).
+
 ## Ownership and cleanup
 
 A dispatched worktree belongs to its worker while follow-up work may be
@@ -158,9 +201,11 @@ the agent's own permission mode — no OS sandbox and no guard hooks
 
 ## Testing
 
-`tests/scripts/test-spawn-repo-agent.sh` stubs `gh` and `herdr` and
+`tests/scripts/spawn-repo-agent.bats` stubs `gh` and `herdr` and
 asserts the call sequence, the lowercase placeholder name, and the
-prompt preamble.
+prompt preamble. Agent first-run answers go where each CLI reads them —
+for Claude Code, `${CLAUDE_CONFIG_DIR:-~}/.claude.json` — and the tests
+unset those config-dir variables so they never touch a real config.
 
 ## Notes
 

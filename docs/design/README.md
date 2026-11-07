@@ -3,7 +3,7 @@ type: Design Doc
 title: herdr-worktree
 description: Why herdr-worktree exists, what it does, and how the parts fit together — the entry point to docs/design/.
 status: current
-last_modified: 2026-11-04
+last_modified: 2026-11-06
 tags: [overview, architecture, design]
 sources: [docs/design]
 ---
@@ -15,7 +15,8 @@ sources: [docs/design]
 Enable safe, concurrent development across multiple repositories from a
 single terminal, orchestrated through herdr.
 
-- One task = one isolated `git worktree`; the base clone is never edited.
+- One task = one isolated `git worktree`, started from the remote's `main`
+  (`master` when a repository has no `main`); the base clone is never edited.
 - A human talks to one **Orchestrator**; real work runs in separate
   **Worker** agent processes.
 - Each worker operates inside the target repository, so that repo's own
@@ -106,9 +107,10 @@ flowchart TB
 └── tests/                           # shell test suites
 ```
 
-Two topologies are supported: **split** (`<lab>/worktree/<repo>/<branch>`
-checkouts under a shared lab root) and **unified** (the checkout is itself
-the lab root).
+Two topologies are supported: **split** (`<lab>/repos` and
+`<lab>/worktree` next to the checkout under a shared lab root) and
+**nested** (the checkout is itself the lab root). See
+[worktrees.md](worktrees.md).
 
 ## Components
 
@@ -116,9 +118,13 @@ the lab root).
 |---|---|---|
 | Orchestrator | Receives the human's request, dispatches workers, reports worker status on request. Implements only herdr-worktree itself, in this checkout on a feature branch (`development` skill) | [orchestration.md](orchestration.md) |
 | Worker | Executes the task inside its assigned worktree; may use repo-local and global skills; runs unconfined | [orchestration.md](orchestration.md) |
-| Agent configs | Per-CLI config dirs + canonical `.agents/skills` | [../reference/agent-configs.md](../reference/agent-configs.md) |
-| Skills | Slash-command procedures available to the orchestrator | [../reference/skills.md](../reference/skills.md) |
-| Scripts | `setup-repo`, `create-worktree`, `spawn-repo-agent` — import, isolation, dispatch | [../reference/scripts.md](../reference/scripts.md) |
+| Lab and worktrees | Base clones under `repos/`, one worktree per task under `worktree/`, the base branch, git hooks | [worktrees.md](worktrees.md) |
+| Agent CLIs | Launching each supported CLI with its model and effort, pre-answering first-run dialogs, startup and prompt recovery | [agent-clis.md](agent-clis.md) |
+| Skills | How the orchestrator is instructed: skills instead of root context files, each skill's role, plugin skills | [skills.md](skills.md) |
+| Scripts | `setup-repo`, `create-worktree`, `spawn-repo-agent`, `list-workers` and the `scripts/lib` modules | [../reference/scripts.md](../reference/scripts.md) |
+| Plugins | Optional extensions behind a four-call contract (describe, machines, ensure, exec); core works alone | [plugins/](plugins/README.md) |
+| Instances (plugin) | Dev containers (one environment per container with its own herdr server) and remote hosts in a git-ignored manifest | [plugins/instances/](plugins/instances/README.md) |
+| Quality | bats tests, coverage and docs-freshness gates, lint, CI | [quality.md](quality.md) |
 
 ## Security posture
 
@@ -130,8 +136,10 @@ the lab root).
 ## Testing
 
 ```bash
-for t in tests/scripts/test-*.sh; do bash "$t"; done   # per-script tests
+bats --recursive tests/                               # shell tests
 ```
+
+How the suites, gates and CI fit together: [quality.md](quality.md).
 
 ## References
 
@@ -144,10 +152,16 @@ for t in tests/scripts/test-*.sh; do bash "$t"; done   # per-script tests
 | Doc | Contents |
 |---|---|
 | [orchestration.md](orchestration.md) | How to ask the orchestrator to run workers — single-call dispatch via `spawn-repo-agent.sh` (task optional) with prompt-stall recovery; lifecycle, monitoring, language contract, natural-language steering of running workers, ownership, cleanup |
+| [worktrees.md](worktrees.md) | The lab (nested and split), importing repositories, the base branch, task worktrees, git hooks |
+| [agent-clis.md](agent-clis.md) | Per-CLI launch flags, model and effort pass-through and the catalog cache, first-run trust, startup failure detection, prompt recovery, the worker's naming and language contract |
+| [skills.md](skills.md) | Skills instead of root context files, each core skill's role and hand-offs, plugin skills, the language contract |
+| [plugins/](plugins/README.md) | Why plugins, who does what, enabling, the contract (version 1), plugin skills, testing, adding a plugin |
+| [plugins/instances/](plugins/instances/README.md) | The instances plugin's architecture: manifest and labels, containers (image, ssh, state volume, Sysbox, `/nix`), remote hosts, security, the TypeScript structure |
+| [quality.md](quality.md) | bats tests and stubs, sourceable scripts and modules, the plugin's tests, coverage/docs/lint gates, hooks, CI, Dependabot |
 
 Fact inventories (config tables, script/skill lists) live in
-[../reference/](../reference/). Decision records live in
-[../adr/](../adr/).
+[../reference/](../reference). Decision records live in
+[../adr/](../adr).
 
 ## Notes
 

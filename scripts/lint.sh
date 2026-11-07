@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # lint.sh — run shellcheck over every tracked shell file in the repo.
 #
-# Covers '*.sh' (scripts/, tests/, and any future .github/scripts/) plus the extension-less git
-# hooks under scripts/hooks/. Uses tools/shellcheck when present (portable
+# Covers '*.sh' (scripts/ and any future .github/scripts/), the bats tests
+# and their helpers under tests/ ('*.bats', '*.bash'), the extension-less git
+# hooks under scripts/hooks/ and the plugins' bin/ shims. Uses tools/shellcheck when present (portable
 # install, gitignored), otherwise shellcheck from PATH.
-set -euo pipefail
 
 main() {
   local repo_root
@@ -27,7 +27,7 @@ main() {
   local f
   while IFS= read -r f; do
     files+=("${f}")
-  done < <(git -C "${repo_root}" ls-files '*.sh' 'scripts/hooks/*')
+  done < <(git -C "${repo_root}" ls-files '*.sh' '*.bats' '*.bash' 'scripts/hooks/*' 'plugins/*/bin/*')
 
   if [[ "${#files[@]}" -eq 0 ]]; then
     echo "no shell files found" >&2
@@ -38,4 +38,8 @@ main() {
   "${shellcheck_bin}" -x "${files[@]}"
 }
 
-main "$@"
+# Run only when executed: tests source this file to call its functions.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  set -euo pipefail
+  main "$@"
+fi

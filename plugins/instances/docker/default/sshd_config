@@ -1,0 +1,9 @@
+# herdr-worktree container: key-only login for the working user.
+# @USERNAME@ is replaced at image build time.
+HostKey /etc/ssh/host_keys/ssh_host_ed25519_key
+HostKey /etc/ssh/host_keys/ssh_host_rsa_key
+AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/authorized_keys/%u
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+AllowUsers @USERNAME@

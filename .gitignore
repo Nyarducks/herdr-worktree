@@ -3,3 +3,15 @@ tmp/
 tools/
 worktree/
 
+instances.yml
+# the instances plugin: the versioned image is docker/default; other image
+# dirs are local custom images
+plugins/instances/docker/*
+!plugins/instances/docker/default/
+# enabled plugins (scripts/plugins.sh) and plugin dependencies
+.plugins/
+plugins/*/node_modules/
+# macOS Finder metadata
+.DS_Store
+# skills linked from enabled plugins (scripts/plugins.sh)
+.agents/skills/plugin-*

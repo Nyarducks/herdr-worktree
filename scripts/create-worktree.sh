@@ -2,16 +2,17 @@
 # Usage: create-worktree.sh [--detach] <[org/]repo-name> <name>
 #   repo-name:   MyRepo | owner/MyRepo
 #   name:        feat/<topic> | fix/<issue> | refactor/<scope> | task/<uuid>
-#   --detach:    create the worktree with a detached HEAD at origin/main
+#   --detach:    create the worktree with a detached HEAD at origin/<base>
 #                instead of creating a branch named <name>
-set -euo pipefail
+#   <base> is origin's main, else master (scripts/lib/repo.sh); a repo
+#   with neither is refused before anything is created.
 
 usage() {
   echo "Usage: $0 [--detach] <[org/]repo-name> <name>" >&2
   echo "  Examples:" >&2
   echo "    $0 owner/MyRepo feat/my-feature" >&2
   echo "    $0 MyRepo feat/my-feature   # requires GH_ORG or existing clone" >&2
-  echo "    $0 --detach owner/MyRepo task/abc123   # detached HEAD at origin/main" >&2
+  echo "    $0 --detach owner/MyRepo task/abc123   # detached HEAD at origin/main (or master)" >&2
   exit 1
 }
 
@@ -30,6 +31,7 @@ add_worktree() {
   local worktree_path="$2"
   local name="$3"
   local detach="$4"
+  local base="$5"
 
   if [[ -d "${worktree_path}" ]]; then
     echo "Error: worktree already exists at ${worktree_path}" >&2
@@ -39,9 +41,9 @@ add_worktree() {
   mkdir -p "$(dirname "${worktree_path}")"
   echo "Creating worktree for ${repo_name} at ${worktree_path} ..."
   if [[ "${detach}" -eq 1 ]]; then
-    git -C "${repo_path}" worktree add --detach "${worktree_path}" origin/main
+    git -C "${repo_path}" worktree add --detach "${worktree_path}" "origin/${base}"
   else
-    git -C "${repo_path}" worktree add "${worktree_path}" -b "${name}" origin/main
+    git -C "${repo_path}" worktree add "${worktree_path}" -b "${name}" "origin/${base}"
   fi
 }
 
@@ -84,6 +86,8 @@ main() {
 
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  # shellcheck source=scripts/lib/repo.sh
+  source "${script_dir}/lib/repo.sh"
 
   local repo_arg="$1"
   local name="$2"
@@ -94,7 +98,10 @@ main() {
   local repo_name worktree_path
   compute_paths "${repo_path}" "${name}"
 
-  add_worktree "${repo_path}" "${worktree_path}" "${name}" "${detach}"
+  local base
+  base="$(hw_base_branch "${repo_path}")"
+
+  add_worktree "${repo_path}" "${worktree_path}" "${name}" "${detach}" "${base}"
   install_herdr_worktree_hooks "${repo_path}"
 
   echo ""
@@ -102,10 +109,14 @@ main() {
   echo "  Repo:   ${repo_name}"
   echo "  Path:   ${worktree_path}"
   if [[ "${detach}" -eq 1 ]]; then
-    echo "  HEAD:   detached at origin/main"
+    echo "  HEAD:   detached at origin/${base}"
   else
-    echo "  Branch: ${name}"
+    echo "  Branch: ${name} (from origin/${base})"
   fi
 }
 
-main "$@"
+# Run only when executed: tests source this file to call its functions.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  set -euo pipefail
+  main "$@"
+fi

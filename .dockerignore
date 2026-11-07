@@ -1,0 +1,10 @@
+repos/
+worktree/
+tmp/
+tools/
+**/.DS_Store
+.claude/settings.local.json
+**/instances.yml
+.plugins/
+plugins/*/node_modules/
+.agents/skills/plugin-*

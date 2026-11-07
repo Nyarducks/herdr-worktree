@@ -3,7 +3,7 @@ type: Reference
 title: Agent Skills
 description: The slash-command skills shipped in .agents/skills and what each one orchestrates.
 status: current
-last_modified: 2026-11-04
+last_modified: 2026-11-07
 tags: [skills, workflow]
 sources: [.agents/skills]
 ---
@@ -17,8 +17,9 @@ set via the `.claude/skills` symlink.
 | Skill | Purpose |
 |---|---|
 | `development` | Must-follow rules and workflow for changing herdr-worktree itself (replaces a root `AGENTS.md`, ADR-0005): work directly in this checkout on a feature branch — implement, test, commit, push, open a PR. Also routes other-repo work to `worktree-development`. |
-| `worktree-development` | Orchestrator mode for every other repository: confirm agent kind + repo with the user, then dispatch via `spawn-repo-agent.sh --reply-lang <human's language>` — a single call that goes all the way to a spawned worker in a fresh detached task worktree (one workspace per repo, one tab per task; task text optional — an idle spawn gets a standby prompt and is tasked later). Never stops at bare worktree creation; reports to the user in natural language, never raw commands to run. See `orchestration.md`. |
-| `herdr-control` | Orchestrator mode for running workers: resolve the human's description of a worker (task, repo, name) to a pane with `list-workers.sh`, then focus it, relay an instruction (in English, after checking it is not busy or blocked), report status, or interrupt. Asks when several workers match. Language rule: think in English, reply in the human's language. |
+| `worktree-development` | Orchestrator mode for every other repository: confirm agent kind + repo with the user, then dispatch via `spawn-repo-agent.sh --reply-lang <human's language>` — a single call that goes all the way to a spawned worker in a fresh detached task worktree (one workspace per repo, one tab per task; task text optional — an idle spawn gets a standby prompt and is tasked later). `--machine <label>` dispatches on another herdr machine (dev container, SSH host). Never stops at bare worktree creation; reports to the user in natural language, never raw commands to run. See `orchestration.md`. |
+| `herdr-control` | Orchestrator mode for running workers: resolve the human's description of a worker (task, repo, name) to a pane with `list-workers.sh`, then focus it, relay an instruction (in English, after checking it is not busy or blocked), report status, or interrupt. Asks when several workers match. Workers on other machines are listed as `<machine>/<pane>` and driven with `herdr --machine <machine>`. Workers on machines a plugin provides are driven with `herdr --machine <label>`; managing those machines is the plugin's skill. Waits for a worker to finish match `idle`, `done` (finished, not yet seen) and `blocked`. Language rule: think in English, reply in the human's language. |
+| `instance-from-repo`, `instances` | Shipped by the `instances` plugin (`plugins/instances/skills/`) and linked as `.agents/skills/plugin-instances-<name>` while it is enabled (ADR-0019): building the best-fitting instance for a repository, and managing the plugin's machines. |
 | `git-operations` | Git discipline for herdr-worktree development only: clone via `gh`, branch from latest `main`, commit/PR conventions, PATCH-based PR edits. Used from `development`. |
 | `workflow-shell-test` | Extract testable shell logic from GitHub Actions workflows and cover it with BATS. |
 
