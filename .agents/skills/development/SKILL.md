@@ -26,7 +26,11 @@ under this checkout (ADR-0005).
 3. **Never edit a delegated worktree** — a worktree assigned to a
    dispatched worker belongs to that worker; send follow-ups to it via
    herdr instead.
-4. **Keep docs current** — update `docs/design/` in the same commit as any
+4. **No reserved file names** — never create a file named like an agent
+   context file in any case or directory (`AGENTS.md`, `CLAUDE.md`,
+   `GEMINI.md`, …): agents load them as instructions, and macOS treats
+   `agents.md` as `AGENTS.md`.
+5. **Keep docs current** — update `docs/design/` in the same commit as any
    behavior change; record significant decisions as ADRs in `docs/adr/`.
    CI enforces the doc↔code link via each doc's `sources:` frontmatter.
 
@@ -51,11 +55,11 @@ worktree is created for herdr-worktree development (ADR-0006).
    `tests/scripts/`) before editing.
 
 3. **Implement** — every `scripts/*.sh` change extends its
-   `tests/scripts/test-<name>.sh`; docs change in the same commit (rule 4).
+   `tests/scripts/<name>.bats`; docs change in the same commit (rule 5).
    Run the suites before pushing:
 
    ```bash
-   for t in tests/scripts/test-*.sh; do bash "$t"; done
+   bats --recursive tests/
    bash scripts/lint.sh
    bash scripts/check-test-coverage.sh
    ```

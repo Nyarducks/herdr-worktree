@@ -6,7 +6,6 @@
 #                instead of creating a branch named <name>
 #   <base> is origin's main, else master (scripts/lib/repo.sh); a repo
 #   with neither is refused before anything is created.
-set -euo pipefail
 
 usage() {
   echo "Usage: $0 [--detach] <[org/]repo-name> <name>" >&2
@@ -116,4 +115,8 @@ main() {
   fi
 }
 
-main "$@"
+# Run only when executed: tests source this file to call its functions.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  set -euo pipefail
+  main "$@"
+fi

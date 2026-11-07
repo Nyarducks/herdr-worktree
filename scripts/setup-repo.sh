@@ -6,14 +6,15 @@
 # master — scripts/lib/repo.sh) if it already exists.
 # Prints the absolute path to the repository on stdout.
 #
-# Org resolution order:
-#   1. <org>/<repo> syntax in the first argument
-#   2. GH_ORG environment variable
-#   3. git remote URL of existing clone
-set -euo pipefail
+# The org is needed only to clone: <org>/<repo> in the argument, else the
+# GH_ORG environment variable. An existing clone is fetched from its own
+# origin. Clones are keyed by repo name, so <org>/<repo> naming another org
+# than an existing repos/<repo> was cloned from is refused instead of
+# silently reusing the other repository.
 
 # Output variables set by parse_repo_arg
 GH_ORG=""
+org_from_arg=0
 repo_name=""
 
 usage() {
@@ -29,26 +30,33 @@ parse_repo_arg() {
   if [[ "${arg}" == */* ]]; then
     GH_ORG="${arg%%/*}"
     repo_name="${arg##*/}"
+    org_from_arg=1
   else
     GH_ORG="${GH_ORG:-}"
     repo_name="${arg}"
+    org_from_arg=0
   fi
 }
 
-# Output variable: lab_dir
-find_lab_dir() {
-  local script_dir="$1"
-  if [[ -n "${WORKTREE_LAB_DIR:-}" ]]; then
-    lab_dir="${WORKTREE_LAB_DIR}"
-    return
-  fi
-  lab_dir="${script_dir}"
-  while [[ "${lab_dir}" != "/" && ! -d "${lab_dir}/repos" ]]; do
-    lab_dir="$(dirname "${lab_dir}")"
-  done
-  if [[ ! -d "${lab_dir}/repos" ]]; then
-    lab_dir="$(dirname "${script_dir}")"
-    mkdir -p "${lab_dir}/repos"
+# clone_org <repo_path> — the GitHub org of the clone's origin; empty when
+# origin is not a GitHub URL. The configured URL is read as written (remote
+# get-url would apply url.*.insteadOf rewrites).
+clone_org() {
+  git -C "$1" config --get remote.origin.url 2>/dev/null |
+    sed -n 's|.*github\.com[:/]\([^/]*\)/.*|\1|p'
+}
+
+# check_same_repo <repo_path> — with <org>/<repo> given, refuse an existing
+# clone of the same name from another org (GitHub org names ignore case).
+check_same_repo() {
+  local repo_path="$1" origin_org
+  [[ "${org_from_arg}" -eq 1 ]] || return 0
+  origin_org="$(clone_org "${repo_path}")"
+  [[ -n "${origin_org}" ]] || return 0
+  if [[ "${origin_org,,}" != "${GH_ORG,,}" ]]; then
+    echo "Error: repos/${repo_name} is a clone of ${origin_org}/${repo_name}, not ${GH_ORG}/${repo_name}." >&2
+    echo "  Repositories are kept by name, so two with the same name cannot share a lab." >&2
+    return 1
   fi
 }
 
@@ -65,10 +73,6 @@ clone_repo() {
 
 update_repo() {
   local repo_path="$1"
-  if [[ -z "${GH_ORG}" ]]; then
-    GH_ORG="$(git -C "${repo_path}" remote get-url origin \
-      | sed 's|.*github\.com[:/]\([^/]*\)/.*|\1|')"
-  fi
   echo "Updating ${repo_name} ..." >&2
   local base
   base="$(hw_base_branch "${repo_path}")"
@@ -88,11 +92,14 @@ main() {
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   # shellcheck source=scripts/lib/repo.sh
   source "${script_dir}/lib/repo.sh"
+  # shellcheck source=scripts/lib/lab.sh
+  source "${script_dir}/lib/lab.sh"
 
   parse_repo_arg "$1"
 
   local lab_dir
-  find_lab_dir "${script_dir}"
+  lab_dir="$(hw_lab_dir "$(dirname "${script_dir}")")"
+  mkdir -p "${lab_dir}/repos"
 
   local repo_path="${lab_dir}/repos/${repo_name}"
 
@@ -101,6 +108,7 @@ main() {
   if [[ ! -d "${repo_path}/.git" && ! -f "${repo_path}/HEAD" ]]; then
     clone_repo "${repo_path}"
   else
+    check_same_repo "${repo_path}" || exit 1
     update_repo "${repo_path}"
   fi
 
@@ -114,4 +122,8 @@ main() {
   echo "${repo_path}"
 }
 
-main "$@"
+# Run only when executed: tests source this file to call its functions.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  set -euo pipefail
+  main "$@"
+fi

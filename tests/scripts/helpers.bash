@@ -1,62 +1,68 @@
 #!/usr/bin/env bash
-# Shared helpers for tests/scripts/*.sh — generic assertions plus PATH stubs
-# for gh/herdr so script behaviour can be tested without network or a real
-# herdr session.
+# helpers.bash — loaded by every tests/scripts/*.bats (`load helpers`):
+# assertions that fail the test, plus PATH stubs for gh/herdr/agent CLIs and
+# a plugin, so script behaviour is tested without network or a real herdr.
 #
-# Sourcing this file also sets:
+# common_setup (call it from setup()) sets, per test:
 #   repo_root — the herdr-worktree checkout under test
-#   t         — a fresh scratch dir (removed on EXIT)
+#   t         — a fresh scratch dir (removed by common_teardown)
 #   stub_bin  — dir prepended to PATH containing stub commands
+#   HW_PLUGINS_DIR, HW_SKILLS_DIR — empty dirs under $t, so no test sees the
+#               plugins or skills enabled in the checkout itself
+#
+# A failing expect_* prints what it saw and returns 1, which fails the test
+# (bats runs test bodies with errexit). A command expected to fail goes
+# through `run` (or `rc=0; cmd || rc=$?`), never a bare call.
 
-pass=0
-fail=0
-declare -a failed_names=()
+# shellcheck disable=SC2034  # repo_root, t and stub_bin are read by the .bats files
+common_setup() {
+  # from this file (tests/scripts/), so tests in subdirectories agree
+  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  # A short path under /tmp: macOS's per-user TMPDIR is long enough to
+  # break the herdr socket paths some scripts derive from it.
+  t="$(realpath "$(mktemp -d /tmp/wth-scripts.XXXXXX)")"
+  export HW_PLUGINS_DIR="${t}/plugins-enabled" HW_SKILLS_DIR="${t}/skills-linked"
+  stub_bin="${t}/bin"
+  mkdir -p "${stub_bin}"
+  PATH="${stub_bin}:${PATH}"
+  # Agent config dirs set in the caller's environment (the dev container
+  # sets CLAUDE_CONFIG_DIR) would point trust edits at the real config.
+  unset CLAUDE_CONFIG_DIR PI_CODING_AGENT_DIR
+}
 
-ok()  { pass=$((pass + 1)); printf '  ok   %s\n' "$1"; }
-bad() { fail=$((fail + 1)); failed_names+=("$1"); printf '  fail %s\n' "$1"; }
+common_teardown() {
+  [[ -n "${t:-}" && -d "${t}" ]] && rm -rf "${t}"
+  return 0
+}
 
-# shellcheck disable=SC2034  # read by the sourcing test scripts
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-t="$(realpath "$(mktemp -d /tmp/wth-scripts.XXXXXX)")"
-stub_bin="${t}/bin"
-mkdir -p "${stub_bin}"
-PATH="${stub_bin}:${PATH}"
-trap 'rm -rf "${t}"' EXIT
+_fail() { # <name> <detail>
+  printf '  fail %s\n       %s\n' "$1" "$2" >&2
+  return 1
+}
 
 expect_rc() { # <name> <rc> <want: 0|nz>
   if [[ "$3" == 0 && "$2" -eq 0 ]] || [[ "$3" == nz && "$2" -ne 0 ]]; then
-    ok "$1"
-  else
-    bad "$1"; printf '       rc=%s\n' "$2"
+    return 0
   fi
+  _fail "$1" "rc=$2"
 }
 expect_eq() { # <name> <got> <want>
-  if [[ "$2" == "$3" ]]; then
-    ok "$1"
-  else
-    bad "$1"; printf '       got=%s want=%s\n' "$2" "$3"
-  fi
+  [[ "$2" == "$3" ]] && return 0
+  _fail "$1" "got=$2 want=$3"
 }
 expect_file() { # <name> <path> <exists|absent>
   if [[ "$3" == exists && -e "$2" ]] || [[ "$3" == absent && ! -e "$2" ]]; then
-    ok "$1"
-  else
-    bad "$1"; printf '       path=%s\n' "$2"
+    return 0
   fi
+  _fail "$1" "path=$2"
 }
 expect_grep() { # <name> <haystack> <needle>
-  if [[ "$2" == *"$3"* ]]; then
-    ok "$1"
-  else
-    bad "$1"; printf '       missing: %s\n' "$3"
-  fi
+  [[ "$2" == *"$3"* ]] && return 0
+  _fail "$1" "missing: $3"
 }
 expect_not_grep() { # <name> <haystack> <needle>
-  if [[ "$2" != *"$3"* ]]; then
-    ok "$1"
-  else
-    bad "$1"; printf '       unexpected: %s\n' "$3"
-  fi
+  [[ "$2" != *"$3"* ]] && return 0
+  _fail "$1" "unexpected: $3"
 }
 
 # --- stub builders -----------------------------------------------------------
@@ -198,3 +204,38 @@ seed_origin() {
 
 # make_lab <dir> — a lab root with repos/ + worktree/ for WORKTREE_LAB_DIR.
 make_lab() { mkdir -p "$1/repos" "$1/worktree"; }
+
+# stub_plugin <id> — an enabled plugin (HW_PLUGINS_DIR) whose bin/hw-plugin
+# speaks the contract from files in $PLUGIN_STUB/<id>/:
+#   machines.json          what `machines` prints
+#   ensure-<target>        exit status of `ensure <target>` (default 0); an
+#                          ensure also creates up-<target>
+#   exec-<target>          what `exec <target> -- …` prints; without it exec
+#                          exits 255 (unreachable). needs-up-<target> makes
+#                          exec fail until an ensure created up-<target>.
+# Every call is appended to $PLUGIN_STUB/<id>/calls. Like ssh, the stub reads
+# stdin, so a caller that does not close it loses its input.
+stub_plugin() {
+  local id="$1"
+  export HW_PLUGINS_DIR="${t}/plugins-enabled"
+  export PLUGIN_STUB="${t}/plugin-stub"
+  mkdir -p "${HW_PLUGINS_DIR}/${id}/bin" "${PLUGIN_STUB}/${id}"
+  cat > "${HW_PLUGINS_DIR}/${id}/bin/hw-plugin" <<STUB
+#!/usr/bin/env bash
+d="\${PLUGIN_STUB}/${id}"
+echo "\$*" >> "\${d}/calls"
+printf '%s\\n' "\$@" > "\${d}/last-argv"
+read -t 1 -r _ || true
+case "\$1" in
+  describe) echo '{"id":"${id}","name":"stub","version":"9.9.9","contract":1,"skills":[]}' ;;
+  machines) cat "\${d}/machines.json" 2>/dev/null || echo '[]' ;;
+  ensure) touch "\${d}/up-\$2"; exit "\$(cat "\${d}/ensure-\$2" 2>/dev/null || echo 0)" ;;
+  exec)
+    [[ -f "\${d}/needs-up-\$2" && ! -f "\${d}/up-\$2" ]] && exit 255
+    [[ -f "\${d}/exec-\$2" ]] || exit 255
+    cat "\${d}/exec-\$2" ;;
+  *) exit 2 ;;
+esac
+STUB
+  chmod +x "${HW_PLUGINS_DIR}/${id}/bin/hw-plugin"
+}

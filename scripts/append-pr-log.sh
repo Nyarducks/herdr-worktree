@@ -13,7 +13,6 @@
 #   ### Why
 #   Review comment pointed out Y was broken when input is empty.
 #   EOF
-set -euo pipefail
 
 readonly DECISION_LOGS_HEADER="## Decision Logs"
 
@@ -97,4 +96,8 @@ main() {
   append_to_pr_body "${owner_repo}" "${pr}" "${current_body}" "${new_entry}"
 }
 
-main "$@"
+# Run only when executed: tests source this file to call its functions.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  set -euo pipefail
+  main "$@"
+fi
