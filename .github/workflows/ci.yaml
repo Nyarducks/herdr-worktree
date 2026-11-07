@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       shell: ${{ steps.filter.outputs.shell }}
+      plugins: ${{ steps.filter.outputs.plugins }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -25,6 +26,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "manual dispatch on ${GITHUB_REF_NAME}: running all checks"
             echo "shell=true" >> "$GITHUB_OUTPUT"
+            echo "plugins=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # synchronize: only the just-pushed commits (event.before..event.after)
@@ -37,10 +39,15 @@ jobs:
           fi
           echo "range: ${range}"
           git diff --name-only "${range}"
-          if git diff --name-only "${range}" | grep -qE '\.sh$|\.github/workflows/'; then
+          if git diff --name-only "${range}" | grep -qE '\.sh$|\.bats$|\.bash$|\.github/workflows/|^scripts/hooks/|^plugins/[^/]+/bin/'; then
             echo "shell=true" >> "$GITHUB_OUTPUT"
           else
             echo "shell=false" >> "$GITHUB_OUTPUT"
+          fi
+          if git diff --name-only "${range}" | grep -qE '^plugins/|\.github/workflows/'; then
+            echo "plugins=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "plugins=false" >> "$GITHUB_OUTPUT"
           fi
 
   shell-test:
@@ -53,14 +60,11 @@ jobs:
       - name: Install test dependencies
         run: sudo apt-get update && sudo apt-get install -y jq
 
+      - name: Install bats
+        run: git clone --depth 1 --branch v1.14.0 https://github.com/bats-core/bats-core.git "$RUNNER_TEMP/bats-core"
+
       - name: Script tests
-        run: |
-          failed=0
-          for t in tests/scripts/test-*.sh; do
-            echo "### ${t}"
-            bash "${t}" || failed=1
-          done
-          exit "${failed}"
+        run: '"$RUNNER_TEMP/bats-core/bin/bats" --recursive tests/'
 
       - name: Test coverage gate
         run: bash scripts/check-test-coverage.sh
@@ -85,14 +89,11 @@ jobs:
       - name: Verify bash ≥ 4
         run: bash -c 'echo "$BASH_VERSION"; [[ "${BASH_VERSINFO[0]}" -ge 4 ]]'
 
+      - name: Install bats
+        run: git clone --depth 1 --branch v1.14.0 https://github.com/bats-core/bats-core.git "$RUNNER_TEMP/bats-core"
+
       - name: Script tests
-        run: |
-          failed=0
-          for t in tests/scripts/test-*.sh; do
-            echo "### ${t}"
-            bash "${t}" || failed=1
-          done
-          exit "${failed}"
+        run: '"$RUNNER_TEMP/bats-core/bin/bats" --recursive tests/'
 
       - name: Test coverage gate
         run: bash scripts/check-test-coverage.sh
@@ -109,6 +110,28 @@ jobs:
 
       - name: Lint
         run: bash scripts/lint.sh
+
+  # The instances plugin (TypeScript on Node.js, no build step): type check
+  # and node --test with a fake runner.
+  plugin-instances:
+    needs: changes
+    if: needs.changes.outputs.plugins == 'true'
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: plugins/instances
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Type check and test
+        run: npm run check
 
   # Docs freshness is cheap (git diff + frontmatter parse) and applies to
   # any file a doc derives from — not just *.sh — so it runs ungated.
