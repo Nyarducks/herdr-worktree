@@ -67,7 +67,7 @@ also carries their workers, with `pane_id` written `<label>/<pane>`
 
 ```bash
 herdr --machine hw-a agent get w2:p3
-herdr --machine hw-a agent prompt w2:p3 "<English instruction>" --wait --until working --until blocked --timeout 120000
+herdr --machine hw-a agent prompt w2:p3 "<English instruction>" --wait --until working --until blocked --timeout 15000
 ```
 
 Ids are per machine — `w2:p3` here and `hw-a/w2:p3` are different
@@ -101,21 +101,42 @@ Focus changes what the user's terminal shows; do it only when asked.
 1. Resolve the pane (above) and check its state with `herdr agent get`.
 2. By state:
    - `idle` / `done` → send it.
-   - `working` → ask the user whether to queue it (wait for idle, then
-     send) or interrupt now (`esc`, then send). Pasting into a busy
-     agent interleaves contexts.
+   - `working` → send it now; it waits in the worker's queue, and
+     Claude Code reads it at its next step, so it can steer the work in
+     progress. Never wait for the worker to go idle first. Interrupt
+     (`esc`, then send) only when the user wants the current work
+     stopped.
    - `blocked` → the worker is waiting on a permission or question. Read
      the screen, tell the user what it is asking, and let the user
      decide; never answer a permission dialog on your own.
 3. Send:
 
    ```bash
-   herdr agent prompt <pane_id> "<English instruction>" --wait --until working --until blocked --timeout 120000
+   herdr agent prompt <pane_id> "<English instruction>" --wait --until working --until blocked --timeout 15000
    ```
 
-4. Report "sent to <name> (<repo>)" right away. Do not wait for the
-   worker's answer unless the user asked for it; read the result later
-   when asked.
+   `--until working --until blocked` returns as soon as the worker is
+   working: when an idle worker picks the prompt up, and at once for a
+   worker that is already working (the prompt is queued). Never send
+   with a bare `--wait`: it waits for `idle`, `done` or `blocked`, the
+   end of the worker's turn (or a dialog), so you block for up to the
+   whole timeout.
+
+   Confirm the text was submitted, since TUI agents (claude, devin) can
+   swallow the trailing Enter and leave the paste in their input:
+   - **Sent to a working worker:** the command returns at once either
+     way, so read the screen once (`herdr agent read <pane_id> --lines 30`).
+   - **`agent_prompt_stalled` or `timeout`:** read the screen too.
+
+   If the text sits in the input and no dialog is showing, press Enter
+   once (`herdr pane send-keys <pane_id> Enter`), as
+   `spawn-repo-agent.sh` does. Otherwise report what the screen shows.
+   Never press Enter while a dialog is showing.
+
+4. Report "sent to <name> (<repo>)" right away; for a working worker,
+   say it was delivered and the worker will read it at its next step.
+   Do not wait for the worker's answer unless the user asked for it;
+   read the result later when asked.
 
 One instruction goes to one worker. If the request names several
 ("tell every billing worker to rebase"), resolve each, list them back,

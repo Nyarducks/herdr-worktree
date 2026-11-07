@@ -3,7 +3,7 @@ type: Design Doc
 title: Orchestration — Orchestrator and Worker lifecycle
 description: How the orchestrator dispatches, monitors, and steers workers through herdr; worker lifecycle and ownership.
 status: current
-last_modified: 2026-11-06
+last_modified: 2026-11-08
 tags: [orchestrator, herdr, dispatch, worker]
 sources: [scripts/spawn-repo-agent.sh, scripts/list-workers.sh, scripts/lib/plugins.sh, scripts/plugins.sh, scripts/lib/repo.sh, .agents/skills/worktree-development/SKILL.md, .agents/skills/herdr-control/SKILL.md]
 ---
@@ -133,15 +133,20 @@ flowchart LR
     L -->|several| Q[ask the human]
     L -->|none| N[report; offer dispatch]
     S -->|idle / done| P[agent prompt, English]
-    S -->|working| C[ask: queue or interrupt]
+    S -->|working| C[agent prompt, queued;<br/>returns at once]
     S -->|blocked| B[show what it asks; human decides]
 ```
 
 The resolved pane id drives `herdr agent focus` (show the worker's pane),
 `agent prompt` (relay), `agent read`/`get` (status) and
-`pane send-keys esc` (interrupt). A working worker is not prompted
-without asking, and a blocked worker's dialog is never answered by the
-orchestrator.
+`pane send-keys esc` (interrupt). A prompt to a working worker is sent
+at once and waits in its queue; `agent prompt` is called with
+`--wait --until working --until blocked`, so it returns as soon as the
+worker is working and never blocks on the worker's turn (ADR-0023).
+herdr does not confirm submission to a working worker, so the
+orchestrator reads the screen once and presses Enter if the text is
+still in the input and no dialog shows (ADR-0008, ADR-0023). A blocked
+worker's dialog is never answered by the orchestrator.
 
 ## Several machines
 

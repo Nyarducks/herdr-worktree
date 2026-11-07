@@ -18,7 +18,7 @@ the change that introduces the decision; see `CONTRIBUTING.md`.
 | [0009](0009-pre-answer-first-run-dialogs.md) | Pre-answer agent first-run dialogs for new worktrees |
 | [0010](0010-model-and-effort-pass-through.md) | Pass model and effort to workers; cache each CLI's model catalog |
 | [0011](0011-macos-portability.md) | Support macOS with portable locking and BSD-safe tooling |
-| [0012](0012-language-contract-and-worker-steering.md) | Think in English, reply in the human's language; steer workers by natural-language reference |
+| [0012](0012-language-contract-and-worker-steering.md) | Think in English, reply in the human's language; steer workers by natural-language reference (relay rule for working workers replaced by 0023) |
 | [0013](0013-ubuntu-dev-container.md) | Ship an Ubuntu development container reachable over SSH |
 | [0014](0014-instance-manifest.md) | Keep instances in a git-ignored manifest; restart containers, explain remote hosts; renameable labels |
 | [0015](0015-custom-container-images.md) | Version docker/default; build custom images from git-ignored docker/<image>/ dirs |
@@ -29,3 +29,4 @@ the change that introduces the decision; see `CONTRIBUTING.md`.
 | [0020](0020-two-way-label-sync.md) | Sync instance labels both ways: the side that changed wins |
 | [0021](0021-bats-and-sourceable-modules.md) | Test shell with bats; write scripts as sourceable modules |
 | [0022](0022-plugin-enable-disable-hooks.md) | Plugins may hook enable and disable; instances takes its machines out of herdr while off |
+| [0023](0023-queue-prompts-without-blocking.md) | Send prompts to a working worker at once; never block on its turn |

@@ -350,7 +350,7 @@ ${lang_rule}"
 
   echo "Dispatched to pane ${pane_id} (repo=${repo_name} worktree=${wt})."
   if [[ -z "${task_text}" ]]; then
-    echo "  Idle (standby prompt sent) — send a task with: herdr agent prompt ${pane_id} \"<task>\" --wait"
+    echo "  Idle (standby prompt sent) — send a task with: herdr agent prompt ${pane_id} \"<task>\" --wait --until working --until blocked --timeout 15000"
   fi
 }
 

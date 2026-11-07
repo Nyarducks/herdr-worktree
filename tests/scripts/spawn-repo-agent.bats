@@ -278,6 +278,7 @@ Error: Upgrade to Pro to access this model (https://devin.ai/pricing)
   out="$("${spawn}" owner/SpawnRepo)"
   expect_grep "reports pane" "${out}" "Dispatched to pane pane-1"
   expect_grep "prints idle hint" "${out}" "herdr agent prompt pane-1"
+  expect_grep "idle hint returns once the task is picked up, not when it is done" "${out}" "--wait --until working --until blocked --timeout"
   log="$(cat "${HERDR_STUB_LOG}")"
   expect_grep "agent launched" "${log}" "herdr agent start w-"
   expect_grep "standby prompt submitted" "${log}" "agent prompt pane-1"
@@ -316,7 +317,7 @@ Error: Upgrade to Pro to access this model (https://devin.ai/pricing)
   echo '[{"label":"box","target":"box-ssh","dir":"~/herdr-worktree","registered":true}]' > "${d}/machines.json"
   printf '%s\n' \
     "Dispatched to pane w3:p2 (repo=api worktree=/home/dev/herdr-worktree/worktree/api/task/abc)." \
-    "  Idle (standby prompt sent) — send a task with: herdr agent prompt w3:p2 \"<task>\" --wait" > "${d}/exec-box-ssh"
+    "  Idle (standby prompt sent) — send a task with: herdr agent prompt w3:p2 \"<task>\" --wait --until working --until blocked --timeout 15000" > "${d}/exec-box-ssh"
   : > "${HERDR_STUB_LOG}"
 
   rc=0

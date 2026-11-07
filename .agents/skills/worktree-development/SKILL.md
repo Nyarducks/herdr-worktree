@@ -131,7 +131,9 @@ One call does the whole sequence:
    `w-<uuid>` via `herdr agent start` (which falls back to `pane run` if
    the caller's permission classifier denies it). The worker runs
    unconfined.
-4. `herdr agent prompt <pane> "<task>" --wait` submits the task atomically.
+4. `herdr agent prompt <pane> "<task>" --wait --until working --until blocked`
+   submits the task atomically and returns once the worker picks it up,
+   not when it finishes.
    The prompt embeds a short preamble telling the worker to rename itself
    (`herdr agent rename <pane> <slug>`) and its tab
    (`herdr tab rename <tab> <title>`) once it knows the task — names like
@@ -181,10 +183,13 @@ herdr agent wait "<pane_id>" --until idle --until done --until blocked --timeout
 herdr agent read "<pane_id>" --source recent-unwrapped --lines 200
 ```
 
-Send follow-up work to the same live agent with:
+Send follow-up work to the same live agent with (a busy worker queues
+it, and this returns at once; never use a bare `--wait`, which blocks
+until the worker's turn ends — `herdr-control` "Relaying an
+instruction"):
 
 ```bash
-herdr agent prompt "<pane_id>" "<follow-up task>" --wait --timeout 120000
+herdr agent prompt "<pane_id>" "<follow-up task>" --wait --until working --until blocked --timeout 15000
 ```
 
 ## Notes
