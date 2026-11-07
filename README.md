@@ -2,6 +2,14 @@
 
 herdr-worktree drives multi-repository development through worktrees. All code changes flow through isolated `git worktree` checkouts — the base repository is never edited directly. This is a convention; nothing is sandboxed.
 
+## v2.0
+
+- **Plugins.** v2.0 adds a plugin system (`scripts/plugins.sh`).
+  Multi-instance support — dev containers and remote hosts as herdr
+  machines — comes as the `instances` plugin (`plugins/instances/`,
+  TypeScript). The core scripts stay bash and work without any plugin.
+- **Node.js.** Plugins run on Node.js ≥ 24 (see Requirements).
+
 ## Supports
 
 | OS | Status |
@@ -24,18 +32,32 @@ At least one agent CLI is needed to dispatch workers (`--kind`):
 
 | Tool | Purpose |
 |---|---|
-| `git` ≥ 2.5 | Worktree support |
+| `git` ≥ 2.31 | Worktrees (`rev-parse --path-format=absolute` needs 2.31) |
 | `gh` (GitHub CLI) | Clone, PR creation, repo auth |
 | `jq` | Agent settings JSON edits in `spawn-repo-agent.sh` |
 | `bash` ≥ 4.3 | Script runtime (macOS ships bash 3) |
 | `herdr` | Orchestration for dispatched workers |
+| Node.js ≥ 24 (with `npm`) | Runs plugins (TypeScript, no build step); not needed when no plugin is enabled |
+
+The `instances` plugin also needs, for its kind of machine:
+
+| Tool | For | Purpose |
+|---|---|---|
+| Docker with Compose v2 | containers | Builds and runs the dev containers |
+| Sysbox (`sysbox-runc` runtime) | containers with `--docker` | Docker inside a container without `--privileged` |
+| OpenSSH client (`ssh`, `ssh-keygen`) | containers and remote hosts | Reaches every instance; herdr forwards over it |
+| SSH access to the host, and the requirements above on it | remote hosts | The worker runs there |
 
 <details>
 <summary>Install on macOS</summary>
 
 ```bash
-brew install git gh jq bash herdr
+brew install git gh jq bash herdr node
 ```
+
+For the `instances` plugin's containers, a Docker engine such as colima
+(`brew install colima docker docker-compose`); Sysbox runs inside its VM —
+see [`plugins/instances/README.md`](plugins/instances/README.md).
 
 </details>
 
@@ -80,6 +102,38 @@ sudo apt install jq
 curl -fsSL https://herdr.dev/install.sh | sh
 ```
 
+Node.js ≥ 24: from [nodejs.org](https://nodejs.org/en/download) or a
+version manager (the distribution's default package can be older).
+
+For the `instances` plugin's containers: Docker Engine with the Compose
+plugin ([docs.docker.com](https://docs.docker.com/engine/install/)) and,
+for `--docker`, [Sysbox](https://github.com/nestybox/sysbox).
+
+</details>
+
+<details>
+<summary>Run workers in containers or on other hosts (plugin)</summary>
+
+Multi-instance support is the `instances` plugin (`plugins/instances/`,
+TypeScript on Node.js ≥ 24). Enable it, then keep dev containers (an
+Ubuntu image with every requirement plus sshd, Nix, Node.js LTS and
+Docker) and remote hosts in its git-ignored manifest; the orchestrator
+dispatches there with `spawn-repo-agent.sh --machine <label>` and brings
+a stopped container back when it does:
+
+```bash
+scripts/plugins.sh enable instances                              # once (installs its npm dependency)
+plugins/instances/bin/instance add container dev-a               # build, start, add to herdr
+plugins/instances/bin/instance add container dev-c --docker      # Docker inside (Sysbox)
+plugins/instances/bin/instance add remote build-box dev@192.0.2.10  # a host you run yourself
+plugins/instances/bin/instance ls
+plugins/instances/bin/instance --help                            # every option; fields: instances.example.yml
+scripts/plugins.sh disable instances                             # core alone again; nothing deleted
+```
+
+See [`plugins/instances/README.md`](plugins/instances/README.md); how
+plugins work and how to write one: [`docs/design/plugins/`](docs/design/plugins/README.md).
+
 </details>
 
 ## Quick start
@@ -98,8 +152,8 @@ works directly in this checkout on a feature branch.
 
 | Doc | Contents |
 |---|---|
-| [`docs/adr/`](docs/adr/) | Architecture decision records |
-| [`docs/design/`](docs/design/) | Design docs — start at the directory README |
-| [`docs/reference/`](docs/reference/) | Fact inventories — agent configs, skills, scripts |
+| [`docs/adr/`](docs/adr) | Architecture decision records |
+| [`docs/design/`](docs/design) | Design docs — start at the directory README |
+| [`docs/reference/`](docs/reference) | Fact inventories — agent configs, skills, scripts |
 | [`development` skill](.agents/skills/development/SKILL.md) | Always-follow rules for changing herdr-worktree |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Development rules |

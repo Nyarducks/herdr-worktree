@@ -28,9 +28,10 @@ Notes:
   an idle spawn still receives a standby prompt carrying the self-naming
   contract, and user-facing reports stay natural-language (the
   orchestrator runs herdr itself). Steering workers that are already
-  running (focus, relayed instructions, status, interrupt) lives in the
-  `herdr-control` skill; waiting for a worker treats `done` (finished,
-  not yet seen) like `idle`. See `orchestration.md`.
+  running (focus, relayed instructions, status, interrupt) — here or on
+  another herdr machine — lives in the `herdr-control` skill; waiting for
+  a worker treats `done` (finished, not yet seen) like `idle`. See
+  `orchestration.md`.
 - There is no root `AGENTS.md`/`CLAUDE.md`: the rules for changing
   herdr-worktree live in the
   `development` skill so they never reach workers through parent-directory
