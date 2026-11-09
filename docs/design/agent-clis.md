@@ -3,7 +3,7 @@ type: Design Doc
 title: Agent CLIs — launching each agent CLI and keeping it working
 description: How spawn-repo-agent.sh starts each supported agent CLI with its flags, model and effort, pre-answers its first-run dialogs, detects startup failures, recovers a stalled prompt, and hands the worker its naming and language contract.
 status: current
-last_modified: 2026-11-07
+last_modified: 2026-11-09
 tags: [agents, worker, dispatch, models, trust]
 sources: [scripts/spawn-repo-agent.sh, scripts/agent-models.sh, scripts/lib/agent-trust.sh, scripts/lib/json.sh, scripts/lib/herdr.sh, scripts/lib/common.sh]
 ---
@@ -197,6 +197,15 @@ sent. Other errors such as `agent_blocked` are never nudged — a stray
 Enter could accept a permission prompt. `Note:`/`Warning:` lines tell the
 orchestrator to look at the pane; a clean `Dispatched to pane …` already
 confirms the start.
+
+Every later prompt uses the same `--wait --until working --until
+blocked`: the hint printed for an idle worker, and the relays in
+`herdr-control`. It returns once the worker is working, at once for a
+busy one whose CLI queues the text, and never waits for the worker's
+turn (ADR-0023). For a busy worker herdr confirms nothing, so the
+orchestrator reads the screen once and applies the same single Enter,
+never while a dialog shows; it does the same after
+`agent_prompt_stalled` or `timeout` on a relay to an idle worker.
 
 ### The prompt contract: self-naming and language
 

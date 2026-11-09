@@ -3,7 +3,7 @@ type: Design Doc
 title: Skills — how the orchestrator is instructed
 description: Why herdr-worktree instructs its orchestrator through on-demand skills instead of root context files, how the skills route requests and hand off to each other, how plugin skills join them, and what a worker receives instead.
 status: current
-last_modified: 2026-11-07
+last_modified: 2026-11-09
 tags: [skills, orchestrator, worker, context, design]
 sources: [.agents/skills, plugins/instances/skills, scripts/plugins.sh, scripts/spawn-repo-agent.sh, scripts/lib/agent-trust.sh]
 ---
@@ -133,7 +133,10 @@ What a worker learns about herdr-worktree is exactly the prompt
 contract (`herdr agent rename`, `herdr tab rename`, slug rules), the
 language rule, and the task — or, with no task, a standby instruction
 carrying the same contract (ADR-0004). Follow-up instructions arrive
-through `herdr-control` as plain English prompts.
+through `herdr-control` as plain English prompts, sent at once even
+while the worker is busy: a CLI that accepts input while working
+(checked with Claude Code) queues them and reads them at its next
+step, and the orchestrator checks the screen once (ADR-0023).
 
 ### Plugin skills
 

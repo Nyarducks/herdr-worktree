@@ -3,7 +3,7 @@ type: Reference
 title: Agent config directories
 description: Which config directory each supported agent CLI reads, and what lives there.
 status: current
-last_modified: 2026-11-06
+last_modified: 2026-11-09
 tags: [agents, config, reference]
 sources: [.claude, .agents]
 ---
@@ -28,7 +28,9 @@ Notes:
   an idle spawn still receives a standby prompt carrying the self-naming
   contract, and user-facing reports stay natural-language (the
   orchestrator runs herdr itself). Steering workers that are already
-  running (focus, relayed instructions, status, interrupt) — here or on
+  running (focus, relayed instructions — sent at once and queued when the
+  worker is busy and its CLI accepts input (checked with Claude Code),
+  ADR-0023 — status, interrupt) — here or on
   another herdr machine — lives in the `herdr-control` skill; waiting for
   a worker treats `done` (finished, not yet seen) like `idle`. See
   `orchestration.md`.

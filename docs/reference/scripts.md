@@ -3,7 +3,7 @@ type: Reference
 title: Scripts
 description: Behavior contract of every script under scripts/ — what it does, what it writes, and what it prints.
 status: current
-last_modified: 2026-11-07
+last_modified: 2026-11-09
 tags: [scripts, reference]
 sources: [scripts]
 ---
@@ -59,7 +59,9 @@ model's levels from `agent-models.sh`, or the kind-wide list when the
 model has none; other kinds reject both flags. The prompt is the task plus a
 self-naming preamble, or — with no task — a standby instruction that
 keeps the naming contract until work arrives via
-`herdr agent prompt <pane> "<task>"`. Both carry a language rule: think
+`herdr agent prompt <pane> "<task>" --wait --until working --until blocked --timeout 15000`
+(the hint it prints; it returns once the worker picks the task up, never
+waiting for its turn, ADR-0023). Both carry a language rule: think
 in English and reply in the `--reply-lang` language, or — without it —
 in the language the human writes in. If the prompt submission stalls
 (agent TUI swallowed the trailing Enter under bracketed paste), the

@@ -3,7 +3,7 @@ type: Design Doc
 title: herdr-worktree
 description: Why herdr-worktree exists, what it does, and how the parts fit together — the entry point to docs/design/.
 status: current
-last_modified: 2026-11-06
+last_modified: 2026-11-09
 tags: [overview, architecture, design]
 sources: [docs/design]
 ---
@@ -151,7 +151,7 @@ How the suites, gates and CI fit together: [quality.md](quality.md).
 
 | Doc | Contents |
 |---|---|
-| [orchestration.md](orchestration.md) | How to ask the orchestrator to run workers — single-call dispatch via `spawn-repo-agent.sh` (task optional) with prompt-stall recovery; lifecycle, monitoring, language contract, natural-language steering of running workers, ownership, cleanup |
+| [orchestration.md](orchestration.md) | How to ask the orchestrator to run workers — single-call dispatch via `spawn-repo-agent.sh` (task optional) with prompt-stall recovery; lifecycle, monitoring, language contract, natural-language steering of running workers (prompts to a busy worker are queued, never waited on), ownership, cleanup |
 | [worktrees.md](worktrees.md) | The lab (nested and split), importing repositories, the base branch, task worktrees, git hooks |
 | [agent-clis.md](agent-clis.md) | Per-CLI launch flags, model and effort pass-through and the catalog cache, first-run trust, startup failure detection, prompt recovery, the worker's naming and language contract |
 | [skills.md](skills.md) | Skills instead of root context files, each core skill's role and hand-offs, plugin skills, the language contract |
