@@ -1,0 +1,68 @@
+# instances.yml — the manifest of the instances plugin (plugins/instances,
+# ADR-0014, ADR-0018). Git-ignored. `plugins/instances/bin/instance` creates
+# it from instances.example.yml on first use and keeps everything above the
+# `instances:` line as it is; below it, it writes one entry per instance
+# (`add`, `rename`, `rm`) and does not keep comments there. Edit an entry
+# by hand to change a field, then apply it as noted per field. The same
+# reference is in plugins/instances/README.md ("Manifest"); every option:
+# `plugins/instances/bin/instance --help`.
+#
+# Format: YAML, checked field by field — under `instances:`, a list of
+# `key: value` maps with the fields below. An unknown field, a wrong type or
+# a nested value is an error (`instances.yml:<line>: <reason>`).
+#
+# Fields and examples (`instance add ...` writes entries like these):
+#
+#   # --- a dev container (docker/<image>/, compose.yml) --------------------
+#   - name: dev-a
+#     # Required. The fixed id: ssh Host alias, herdr machine target and
+#     # compose project. ^[a-z][a-z0-9-]{0,31}$. Never change it by hand —
+#     # `instance rm` it and `add` it again under the new name.
+#     kind: container
+#     # Required. `container` (built and started here) or `remote` (a host
+#     # you run yourself; never started from here).
+#     label: dev-a
+#     # Optional, default the name. What herdr shows in its sidebar and what
+#     # `--machine` and the <label>/<pane> worker rows use. 1-64 characters,
+#     # no spaces, `/` or `|`, unique among herdr's machines (ignoring
+#     # case). Change it here, with `instance rename`, or in herdr: the
+#     # next `ensure`/`ls` brings the other side along (the side that changed
+#     # since they last agreed wins; the manifest when both did).
+#     port: 2222
+#     # Optional; `instance add` picks 2222 or the next port no other
+#     # container uses. The SSH port published on 127.0.0.1 of this
+#     # machine; one per container. Takes effect on `instance rebuild`.
+#     image: default
+#     # Optional, default `default`. The build directory docker/<image>/:
+#     # `default` is the versioned image, any other directory a local,
+#     # git-ignored one (`instance image new <image>`, ADR-0015). Takes
+#     # effect on `instance rebuild`, which recreates the container
+#     # (`ensure` only warns about the difference).
+#     docker: false
+#     # Optional, default false. true runs a Docker daemon inside the
+#     # container through Sysbox (no --privileged, ADR-0017), so a worker can
+#     # use the repository's own `docker compose`. Needs Sysbox on the
+#     # Docker host. Takes effect on `instance rebuild`.
+#
+#   # --- a remote host reached over SSH -------------------------------------
+#   - name: build-box
+#     kind: remote
+#     label: build-box
+#     host: 192.0.2.10
+#     # Required. IP address or host name of the machine.
+#     port: 22
+#     # Optional, default 22. Its SSH port.
+#     user: dev
+#     # Optional. The SSH user; without it, ssh's own default applies.
+#     identity: /path/to/private_key
+#     # Optional. Private key file on this machine (absolute path, no spaces,
+#     # quotes or backslashes). Without it, ssh's own keys and agent are used.
+#     dir: ~/herdr-worktree
+#     # Optional, default ~/herdr-worktree. The herdr-worktree checkout on
+#     # that host, where `--machine` runs its scripts (`~` expands there).
+#     #
+#     # host, port, user and identity become ~/.config/herdr-worktree/
+#     # remotes/<name>/ssh_config on every `ensure`/`ls`, so an edit applies
+#     # at once. The host needs git, gh, jq, herdr, the checkout and a
+#     # running `herdr server`; `ensure` says what is missing.
+instances:

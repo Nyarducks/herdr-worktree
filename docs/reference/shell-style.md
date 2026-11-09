@@ -3,22 +3,37 @@ type: Reference
 title: Shell Script Style Guide
 description: Style conventions for everything under scripts/ and the hook scripts — safety header, variable naming, quoting, function scope.
 status: current
-last_modified: 2026-09-20
+last_modified: 2026-11-07
 tags: [style, bash, conventions]
 sources: []
 ---
 
 Applies to everything under `scripts/` and the hook scripts.
 
-## 1. Safety Header
+## 1. Safety Header and the Main Guard
 
-Always start scripts with a standard bash shebang and strict execution
-flags to fail fast on errors.
+Start scripts with a standard bash shebang, put the work in `main`, and
+end with the main guard: it turns on the strict flags and runs `main` only
+when the file is executed. A test that `source`s the script gets the
+functions without running anything (see §7).
 
 ```bash
 #!/usr/bin/env bash
-set -euo pipefail
+# what this script does, its usage
+
+main() {
+  ...
+}
+
+# Run only when executed: tests source this file to call its functions.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  set -euo pipefail
+  main "$@"
+fi
 ```
+
+Hook scripts under `scripts/hooks/` are never sourced; they keep
+`set -euo pipefail` right after the shebang.
 
 - `-e`: Exit immediately if a command exits with a non-zero status.
 - `-u`: Treat unset variables as an error and exit immediately.
@@ -123,17 +138,42 @@ source "${script_root}/scripts/lib/helper.sh"
 
 ```bash
 #!/usr/bin/env bash
-set -euo pipefail
+# backup-logs.sh <app> — archive an app's logs
 
 readonly LOG_DIR="/var/log/app"
-readonly MAX_RETRIES=3
 
-backup_logs() {
+lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+# shellcheck source=scripts/lib/common.sh
+source "${lib_dir}/common.sh"
+
+archive_path() {
   local target_app="$1"
-  local destination_archive="${LOG_DIR}/${target_app}_archive.tar.gz"
-
-  echo "Creating archive: ${destination_archive}"
+  printf '%s\n' "${LOG_DIR}/${target_app}_archive.tar.gz"
 }
 
-backup_logs "service-a"
+main() {
+  [[ $# -eq 1 ]] || hw_die "usage: backup-logs.sh <app>"
+  echo "Creating archive: $(archive_path "$1")"
+}
+
+# Run only when executed: tests source this file to call its functions.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  set -euo pipefail
+  main "$@"
+fi
 ```
+
+## 7. Modules and Testability
+
+- Logic used by more than one script lives in `scripts/lib/<topic>.sh`
+  (`docs/reference/scripts.md` lists them). A module only defines
+  functions: no top-level work, no `set` flags, no `exit` except `hw_die`.
+- Module functions are prefixed `hw_`. A failure prints `Error: …` to
+  stderr and returns 1; the calling script decides to stop
+  (`hw_wait_for_agent "${pane}" "${kind}" || exit 1`).
+- Keep functions small and pass inputs as arguments rather than globals, so
+  a test can call one function with fixtures.
+- Every script has `tests/scripts/<name>.bats` and every module
+  `tests/scripts/lib/<name>.bats` (enforced by `check-test-coverage.sh`).
+  A test either runs the script end to end with stubs, or `source`s it (or
+  a module) and calls a function directly.

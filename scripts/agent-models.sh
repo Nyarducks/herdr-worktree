@@ -30,7 +30,6 @@
 # An entry is rebuilt when missing, older than AGENT_MODELS_TTL_DAYS
 # (default 7), or with --refresh. When a CLI is not installed, the built-in
 # fallback lists are used and nothing is cached.
-set -euo pipefail
 
 readonly CLAUDE_MODELS='fable	Claude Fable (latest)
 opus	Claude Opus (latest)
@@ -212,4 +211,8 @@ main() {
   if [[ "${what}" == "models" ]]; then cat "${models_file}"; else cat "${efforts_file}"; fi
 }
 
-main "$@"
+# Run only when executed: tests source this file to call its functions.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  set -euo pipefail
+  main "$@"
+fi

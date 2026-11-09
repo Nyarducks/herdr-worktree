@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
-# Usage: spawn-repo-agent.sh [--kind <claude|agy|...>] [--model <model>]
-#          [--effort <level>] [--reply-lang <language>] <[org/]repo>
-#          [-- <task text...>]
+# Usage: spawn-repo-agent.sh [--machine <machine>] [--kind <claude|agy|...>]
+#          [--model <model>] [--effort <level>] [--reply-lang <language>]
+#          <[org/]repo> [-- <task text...>]
+#
+# --machine dispatches on another machine that an enabled plugin provides
+# (scripts/lib/plugins.sh; e.g. plugins/instances: a dev container or a
+# remote host), named by its label or target. The plugin ensures it first
+# (a stopped container is restarted), then the rest of the arguments go to
+# that machine's own spawn-repo-agent.sh through the plugin's exec, so the
+# clone, the worktree, the git credentials and the worker all stay there. Its output comes back with pane ids as <label>/<pane> and herdr
+# commands as `herdr --machine <label> ...`, using the current label.
 #
 # --reply-lang names the human's natural language (e.g. Japanese). The
 # prompt always tells the worker to think in English; with --reply-lang it
@@ -23,7 +31,7 @@
 #
 # Dispatches a dedicated agent process via herdr:
 #   1. imports/refreshes repos/<repo> and creates a worktree at
-#      worktree/<repo>/task/<uuid> with a detached HEAD at origin/main —
+#      worktree/<repo>/task/<uuid> with a detached HEAD at origin/main (or master) —
 #      the uuid leaf keeps concurrent dispatches collision-free and no
 #      branch is named before the task is understood
 #   2. reuses the repo's herdr workspace (one workspace per repo, matched by
@@ -41,216 +49,84 @@
 #
 # Monitoring is pull-based: `herdr agent wait <pane> --until idle` and
 # `herdr agent read <pane>` — workers carry no reporting protocol.
-set -euo pipefail
+
+lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+# shellcheck source=scripts/lib/common.sh
+source "${lib_dir}/common.sh"
+# shellcheck source=scripts/lib/herdr.sh
+source "${lib_dir}/herdr.sh"
+# shellcheck source=scripts/lib/json.sh
+source "${lib_dir}/json.sh"
+# shellcheck source=scripts/lib/agent-trust.sh
+source "${lib_dir}/agent-trust.sh"
 
 usage() {
-  echo "Usage: $0 [--kind <claude|agy|...>] [--model <model>] [--effort <level>] [--reply-lang <language>] <[org/]repo> [-- <task text...>]" >&2
+  echo "Usage: $0 [--machine <machine>] [--kind <claude|agy|...>] [--model <model>] [--effort <level>] [--reply-lang <language>] <[org/]repo> [-- <task text...>]" >&2
   exit 1
 }
 
-require_herdr() {
-  command -v herdr > /dev/null 2>&1 || {
-    echo "Error: herdr not found on PATH. Cannot dispatch a worker." >&2
-    exit 1
-  }
-  [[ "${HERDR_ENV:-}" == "1" ]] || {
-    echo "Error: not running inside a herdr session (HERDR_ENV is unset)." >&2
-    exit 1
-  }
-}
-
-# gen_uuid — short lowercase id for the worktree dir and branch suffix.
-gen_uuid() {
-  local u=""
-  if [[ -r /proc/sys/kernel/random/uuid ]]; then
-    u="$(cat /proc/sys/kernel/random/uuid)"
-  elif command -v uuidgen > /dev/null 2>&1; then
-    u="$(uuidgen)"
-  else
-    u="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-  fi
-  # macOS uuidgen is uppercase; herdr agent names must be lowercase.
-  u="$(printf '%s' "${u//-/}" | tr '[:upper:]' '[:lower:]')"
-  printf '%s\n' "${u:0:12}"
-}
-
-# launch_error <pane_id> <kind>
-# Prints the first `Error:` line the agent CLI wrote after its most recent
-# launch command in the pane (e.g. devin's "Error: Upgrade to Pro to access
-# this model"), or nothing. A CLI that exits at startup leaves the agent
-# unregistered, so herdr would otherwise wait out its full timeout.
-launch_error() {
-  local pane_id="$1" kind="$2"
-  herdr pane read "${pane_id}" --source recent-unwrapped --lines 40 2>/dev/null |
-    awk -v k="${kind}" '
-      { line[NR] = $0 }
-      $0 ~ ("(^|[ /])" k "( |$)") { start = NR }
-      END {
-        if (!start) exit
-        for (i = start + 1; i <= NR; i++) {
-          l = line[i]; sub(/^[ \t]+/, "", l)
-          if (l ~ /^([Ee]rror|fatal)[: ]/) { print l; exit }
-        }
-      }'
-}
-
-# pane_has_dialog <pane_id>
-# True when the pane shows a selection/confirmation dialog (trust prompts,
-# import approvals, …). herdr can report such an agent as idle, so an Enter
-# nudge or a resent prompt would answer the dialog — check before either.
-pane_has_dialog() {
-  herdr pane read "$1" --source recent-unwrapped --lines 30 2>/dev/null |
-    grep -Eqi 'enter (to )?(select|confirm|continue)|esc (to )?(skip|cancel)|do not trust|trust (this|project)|allow external|update available'
-}
-
-# fail_launch <pane_id> <message>
-fail_launch() {
-  echo "Error: the agent exited during startup in pane $1: $2" >&2
-  exit 1
-}
-
-# wait_for_agent <pane_id> <kind>
-# After `herdr pane run`, `herdr agent wait` errors with "agent_not_found"
-# until the agent's SessionStart hook registers the pane — retry briefly.
-wait_for_agent() {
-  local pane_id="$1" kind="$2" attempt=0 err
-  until herdr agent wait "${pane_id}" --until idle --until blocked --timeout 5000 >&2; do
-    err="$(launch_error "${pane_id}" "${kind}")"
-    [[ -n "${err}" ]] && fail_launch "${pane_id}" "${err}"
-    attempt=$((attempt + 1))
-    if [[ ${attempt} -ge 6 ]]; then
-      echo "Error: agent at pane ${pane_id} did not register/become ready in time." >&2
-      exit 1
-    fi
-    sleep 1
-  done
-}
-
-# json_merge_atomic <file> <path-arg> <jq-filter>
-# Applies <jq-filter> (with $path bound to <path-arg>) to <file> in place,
-# atomically (lock + mktemp + mv). The lock is a directory — mkdir(2) is
-# atomic on every platform, so no flock(1) dependency (flock is Linux-only
-# and was never in Requirements). mktemp templates keep their X's trailing
-# for BSD mktemp. Recovers an empty object first when the file is corrupt.
-json_merge_atomic() {
-  local settings_file="$1" path_arg="$2" filter="$3"
-  local lockdir="${settings_file}.lock.d" tries=0
-  until mkdir "${lockdir}" 2>/dev/null; do
-    tries=$((tries + 1))
-    # every ~10s assume the holder died mid-merge and break the stale lock
-    # (the lockdir is always empty, so rmdir is a safe reclaim)
-    if (( tries % 100 == 0 )); then
-      rmdir "${lockdir}" 2>/dev/null || true
-    fi
-    if (( tries > 300 )); then
-      echo "Error: timed out locking ${settings_file}" >&2
-      return 1
-    fi
-    sleep 0.1
-  done
-  local rc=0
-  (
-    if ! jq -e 'type == "object"' "${settings_file}" >/dev/null 2>&1; then
-      local backup_file recovery_tmp
-      backup_file="$(mktemp "${settings_file}.corrupt-XXXXXX")"
-      mv "${backup_file}" "${backup_file}.bak"
-      backup_file="${backup_file}.bak"
-      cp "${settings_file}" "${backup_file}" 2>/dev/null || true
-      recovery_tmp="$(mktemp "${settings_file}.XXXXXX")"
-      echo "{}" > "${recovery_tmp}"
-      mv "${recovery_tmp}" "${settings_file}" 2>/dev/null || rm -f "${recovery_tmp}"
-    fi
-
-    local tmp_file
-    tmp_file="$(mktemp "${settings_file}.XXXXXX")"
-    if jq --arg path "${path_arg}" "${filter}" "${settings_file}" > "${tmp_file}" 2>/dev/null; then
-      mv "${tmp_file}" "${settings_file}" 2>/dev/null || rm -f "${tmp_file}"
+# dispatch_on_machine <machine> <args...> — run the machine's own
+# spawn-repo-agent.sh with <args> through the plugin that provides it, and
+# rewrite its pane ids and herdr commands so they can be used from here.
+dispatch_on_machine() {
+  local machine="$1"
+  shift
+  local found bin target
+  found="$(hw_plugin_find "${machine}")"
+  if [[ -z "${found}" ]]; then
+    if [[ -z "$(hw_plugin_bins)" ]]; then
+      echo "Error: --machine needs a plugin that provides machines; none is enabled (see: scripts/plugins.sh ls)." >&2
     else
-      rm -f "${tmp_file}"
+      echo "Error: no machine labeled or named '${machine}' (see: scripts/plugins.sh machines)." >&2
     fi
-  ) || rc=$?
-  rmdir "${lockdir}"
-  return "${rc}"
-}
-
-# ensure_trusted_workspace <worktree_path>
-# Pre-trusts the worktree for supported agent CLIs so the worker does not
-# stop at a first-run workspace-confirmation dialog:
-#   - agy:    ~/.gemini/antigravity-cli/settings.json → trustedWorkspaces
-#   - claude: ~/.claude.json → projects[<wt>].hasTrustDialogAccepted, plus
-#             the external-CLAUDE.md-imports dialog pre-answered "No"
-#             (hasClaudeMdExternalIncludesApproved=false, ...WarningShown=true).
-#             Worktrees can sit under the herdr-worktree checkout or another dir
-#             with a CLAUDE.md; any import reaching outside the worktree
-#             would otherwise stop the worker at that dialog, and declining
-#             keeps foreign rules out of it.
-#   - pi:     ${PI_CODING_AGENT_DIR:-~/.pi/agent}/trust.json → {<wt>: true}.
-#             pi's trust check walks every ancestor for a project
-#             `.agents/skills`, so herdr-worktree's own skills above the
-#             worktree trigger "Trust project folder?" even when the repo
-#             has nothing protected. Skill discovery stops at the repo root
-#             (the worktree), so trusting it loads only the repo's own
-#             resources, never herdr-worktree's skills.
-ensure_trusted_workspace() {
-  local worktree_path="$1"
-  command -v jq >/dev/null 2>&1 || return 0
-
-  local agy_settings="${HOME}/.gemini/antigravity-cli/settings.json"
-  if [[ -f "${agy_settings}" ]]; then
-    # single quotes are intentional — $path is a jq variable, not shell
-    # shellcheck disable=SC2016
-    json_merge_atomic "${agy_settings}" "${worktree_path}" \
-      '.trustedWorkspaces = ((.trustedWorkspaces // []) + [$path] | unique)'
+    exit 1
   fi
-
-  local claude_settings="${HOME}/.claude.json"
-  if [[ -f "${claude_settings}" ]]; then
-    # single quotes are intentional — $path is a jq variable, not shell
-    # shellcheck disable=SC2016
-    json_merge_atomic "${claude_settings}" "${worktree_path}" \
-      '.projects[$path] = ((.projects[$path] // {}) + {
-         hasTrustDialogAccepted: true,
-         hasClaudeMdExternalIncludesApproved: false,
-         hasClaudeMdExternalIncludesWarningShown: true
-       })'
-  fi
-
-  local pi_trust="${PI_CODING_AGENT_DIR:-${HOME}/.pi/agent}/trust.json"
-  if [[ -d "$(dirname "${pi_trust}")" ]]; then
-    [[ -f "${pi_trust}" ]] || echo '{}' > "${pi_trust}"
-    # single quotes are intentional — $path is a jq variable, not shell
-    # shellcheck disable=SC2016
-    json_merge_atomic "${pi_trust}" "${worktree_path}" '.[$path] = true'
-  fi
-}
-
-# workspace_pane_for <repo_name> <worktree_path> <tab_label>
-# Prints the pane_id hosting the new worktree: a new tab in the repo's
-# existing workspace when one exists, otherwise a new workspace's root pane.
-workspace_pane_for() {
-  local repo_name="$1" wt="$2" tab_label="$3"
-  local ws_id pane_id
-  ws_id="$(herdr workspace list 2>/dev/null | jq -r --arg l "${repo_name}" \
-    '[.result.workspaces[]? | select(.label == $l)][0].workspace_id // empty')"
-
-  if [[ -n "${ws_id}" ]]; then
-    pane_id="$(herdr tab create --workspace "${ws_id}" --cwd "${wt}" \
-      --label "${tab_label}" --no-focus |
-      jq -r '.result.root_pane.pane_id // .result.pane.pane_id // empty')"
-  else
-    pane_id="$(herdr workspace create --cwd "${wt}" --label "${repo_name}" --no-focus |
-      jq -r '.result.root_pane.pane_id // empty')"
-  fi
-  [[ -n "${pane_id}" && "${pane_id}" != "null" ]] || {
-    echo "Error: could not obtain a pane for ${wt}." >&2
+  IFS=$'\t' read -r bin machine target <<< "${found}"
+  # bring it into use first (a plugin restarts a stopped container and
+  # explains a remote host that is down)
+  hw_plugin_ensure "${bin}" "${target}" || {
+    echo "Error: machine ${machine} is not available (see above)." >&2
     exit 1
   }
-  printf '%s\n' "${pane_id}"
+  # the label goes into sed replacements: escape \, & and the | delimiter
+  local esc
+  esc="$(printf '%s' "${machine}" | sed 's/[\\&|]/\\&/g')"
+  hw_plugin_exec "${bin}" "${target}" scripts/spawn-repo-agent.sh "$@" 2>&1 |
+    sed -e "s|Dispatched to pane \([^ ]*\)|Dispatched to pane ${esc}/\1|" \
+      -e "s|herdr agent |herdr --machine ${esc} agent |g"
+}
+
+# fail_launch <pane_id> <message> — the agent CLI exited at startup.
+fail_launch() {
+  hw_die "the agent exited during startup in pane $1: $2"
 }
 
 main() {
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+  # --machine may appear anywhere before the task's `--`; the other
+  # arguments pass through unchanged to the machine's own script.
+  local machine="" rest=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --machine) machine="${2:?--machine needs a value}"; shift 2 ;;
+      --machine=*)
+        machine="${1#*=}"
+        # empty would silently run here, with this machine's credentials
+        [[ -n "${machine}" ]] || hw_die "--machine needs a value"
+        shift ;;
+      --) rest+=("$@"); break ;;
+      *) rest+=("$1"); shift ;;
+    esac
+  done
+  set -- "${rest[@]+"${rest[@]}"}"
+  if [[ -n "${machine}" ]]; then
+    # shellcheck source=scripts/lib/plugins.sh
+    source "${script_dir}/lib/plugins.sh"
+    dispatch_on_machine "${machine}" "$@"
+    return
+  fi
 
   local kind="claude" model="" effort="" reply_lang=""
   while [[ $# -gt 0 ]]; do
@@ -313,18 +189,18 @@ main() {
     task_text="$*"
   fi
 
-  require_herdr
+  hw_require_herdr || exit 1
 
   local repo_name="${repo_arg##*/}"
   repo_name="${repo_name%.git}"
   local uuid leaf wt pane_id
-  uuid="$(gen_uuid)"
+  uuid="$(hw_short_id)"
   leaf="task/${uuid}"
 
   # create-worktree.sh also imports/refreshes repos/<repo> via setup-repo.sh
   # and installs herdr-worktree's git hooks. Its summary goes to stdout; only the
   # Path line is consumed here. The worktree starts on a detached HEAD at
-  # origin/main — no branch is named until the work (and its slug) is known.
+  # origin/main (or master) — no branch is named until the work (and its slug) is known.
   wt="$("${script_dir}/create-worktree.sh" --detach "${repo_arg}" "${leaf}" |
     awk '/^  Path:/ {print $2; exit}')"
   [[ -n "${wt}" && -d "${wt}" ]] || {
@@ -332,12 +208,12 @@ main() {
     exit 1
   }
 
-  pane_id="$(workspace_pane_for "${repo_name}" "${wt}" "${leaf//\//-}")"
+  pane_id="$(hw_workspace_pane_for "${repo_name}" "${wt}" "${leaf//\//-}")"
   local tab_id
   tab_id="$(herdr pane get "${pane_id}" | jq -r '.result.pane.tab_id // empty')"
 
   # Pre-trust the worktree so the worker's first-run dialog does not block it.
-  ensure_trusted_workspace "${wt}"
+  hw_trust_worktree "${wt}"
 
   local -a agent_flags=()
   case "${kind}" in
@@ -377,7 +253,7 @@ main() {
     ${agent_flags[@]+"${agent_flags[@]}"} >&2 &
   local start_pid=$! start_rc=0 err=""
   while kill -0 "${start_pid}" 2>/dev/null; do
-    err="$(launch_error "${pane_id}" "${kind}")"
+    err="$(hw_launch_error "${pane_id}" "${kind}")"
     if [[ -n "${err}" ]]; then
       kill "${start_pid}" 2>/dev/null || true
       wait "${start_pid}" 2>/dev/null || true
@@ -387,11 +263,11 @@ main() {
   done
   wait "${start_pid}" || start_rc=$?
   if [[ ${start_rc} -ne 0 ]]; then
-    err="$(launch_error "${pane_id}" "${kind}")"
+    err="$(hw_launch_error "${pane_id}" "${kind}")"
     [[ -n "${err}" ]] && fail_launch "${pane_id}" "${err}"
     if ! herdr agent get "${pane_id}" > /dev/null 2>&1; then
       herdr pane run "${pane_id}" "cd $(printf '%q' "${wt}") && ${kind}${quoted_flags}" >&2
-      wait_for_agent "${pane_id}" "${kind}"
+      hw_wait_for_agent "${pane_id}" "${kind}" || exit 1
     fi
   fi
 
@@ -447,7 +323,7 @@ ${lang_rule}"
   local prompt_out
   if ! prompt_out="$(herdr agent prompt "${pane_id}" "${prompt}" \
       --wait --until working --until blocked --timeout 15000 2>&1)"; then
-    if pane_has_dialog "${pane_id}"; then
+    if hw_pane_has_dialog "${pane_id}"; then
       echo "Warning: the agent is showing a dialog; nothing was sent to it. Answer it in the pane:" >&2
       echo "  herdr agent read ${pane_id} --lines 30" >&2
     elif grep -Eq 'agent_prompt_stalled|"code": ?"timeout"' <<< "${prompt_out}"; then
@@ -474,8 +350,12 @@ ${lang_rule}"
 
   echo "Dispatched to pane ${pane_id} (repo=${repo_name} worktree=${wt})."
   if [[ -z "${task_text}" ]]; then
-    echo "  Idle (standby prompt sent) — send a task with: herdr agent prompt ${pane_id} \"<task>\" --wait"
+    echo "  Idle (standby prompt sent) — send a task with: herdr agent prompt ${pane_id} \"<task>\" --wait --until working --until blocked --timeout 15000"
   fi
 }
 
-main "$@"
+# Run only when executed: tests source this file to call its functions.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  set -euo pipefail
+  main "$@"
+fi

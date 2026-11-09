@@ -10,11 +10,15 @@
     in
     {
       # Development-only tools. The runtime requirements (bash, git, gh,
-      # jq, herdr) are installed per README "Requirements", not here.
+      # jq, herdr, Node.js for plugins) are installed per README
+      # "Requirements", not here; bats runs the shell tests, and Node.js is
+      # here too so plugin checks (npm run check) run in this shell.
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           packages = with pkgs; [
             shellcheck
+            bats
+            nodejs_24
           ];
         };
       });

@@ -26,14 +26,16 @@ Everything under `scripts/` and `tests/` follows
 
 ## Tests
 
-Shell tests live in `tests/`. They need the README requirements (bash,
-git, gh, jq) — not herdr or the agent CLIs, which they stub.
-`nix develop` adds the development-only tools (`shellcheck`, see
-`flake.nix`). Run them before pushing:
+Shell tests are [bats](https://github.com/bats-core/bats-core) files in
+`tests/`. They need the README requirements (bash, git, gh, jq) and bats —
+not herdr or the agent CLIs, which they stub. `nix develop` adds the
+development-only tools (bats, `shellcheck`, and Node.js for the plugin
+checks; see `flake.nix`). Run them before pushing:
 
 ```bash
-for t in tests/scripts/test-*.sh; do bash "$t"; done   # per-script tests
+bats --recursive tests/                     # every shell test
 bash scripts/lint.sh                        # shellcheck every shell file
+(cd plugins/instances && npm ci && npm run check)       # the instances plugin
 ```
 
 `lint.sh` uses `tools/shellcheck` when present (portable install,
@@ -41,10 +43,17 @@ gitignored — see its error message for the one-line install), otherwise
 shellcheck from PATH (the `nix develop` shell provides it). It lints
 tracked files only.
 
-Any change to `scripts/*.sh` must extend the matching `tests/scripts/test-*.sh` —
-stubs for `gh`/`herdr` live in
-`tests/scripts/lib.sh`. The
-`scripts/*.sh` → `tests/scripts/test-*.sh` pairing is enforced by
+Any change to `scripts/*.sh` must extend the matching
+`tests/scripts/<name>.bats`. Each file starts with `load helpers`:
+`tests/scripts/helpers.bash` has the per-test scratch dir (`common_setup`,
+`common_teardown`), the `expect_*` assertions (a failing one fails the
+test) and the stubs for `gh`, `herdr`, the agent CLIs and a plugin. Each
+`@test` stands alone; a command expected to fail goes through `run`.
+Shellcheck does not follow `load`, so each file disables SC2154 right
+before it. Shared logic goes into a `scripts/lib/<topic>.sh` module with
+its own `tests/scripts/lib/<topic>.bats`; scripts run `main` only when
+executed, so a test can `source` one and call a function (see
+`docs/reference/shell-style.md` §7). Both pairings are enforced by
 `scripts/check-test-coverage.sh`.
 
 ## Documentation
@@ -55,7 +64,9 @@ Docs are part of every change:
   frontmatter; `type`, `title`, `description`, `status`,
   `last_modified`, `sources`). Design docs capture intent and invariants
   (What/Why/How at the design level), not implementation detail. Update
-  the relevant doc in the same commit as any behavior change.
+  the relevant doc in the same commit as any behavior change. The plugin
+  system is described in `docs/design/plugins/README.md`, and each
+  plugin's design in `docs/design/plugins/<id>/README.md`.
 - **`docs/reference/`** — fact inventories (config tables, script/skill
   lists). Same frontmatter convention with `type: Reference`.
 - **`docs/adr/`** — record significant decisions as
@@ -67,13 +78,17 @@ Docs are part of every change:
 - **`development` skill** — must-follow rules for changing herdr-worktree; do
   not document structure or usage there. Do not add a root
   `AGENTS.md`/`CLAUDE.md` (ADR-0005).
+- **File names** — never name a file after an agent context file, in any
+  letter case and in any directory: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`
+  and the like. Agent CLIs load such files as instructions, and on a
+  case-insensitive filesystem (macOS) `agents.md` *is* `AGENTS.md`.
 
 ### Keeping docs fresh
 
 Docs rot when prose claims drift from code. Three mechanisms prevent it:
 
 - **`sources:` contract** — every design/reference doc *derived from
-  code* lists the files it is derived from.
+  code*, and each plugin's `README.md`, lists the files it is derived from.
   `scripts/check-docs-stale.sh` fails a PR that changes a source without
   touching its doc, or that leaves a `sources` entry pointing at a
   deleted/renamed path. Keep `sources` as narrow as the doc's actual

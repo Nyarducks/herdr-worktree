@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Install git hooks as symlinks into the common git dir.
 # Safe to call from both the main repo and any worktree.
-set -euo pipefail
 
 # Output variables: base_root, git_common_dir
 resolve_git_dirs() {
@@ -32,4 +31,8 @@ main() {
   install_hooks
 }
 
-main "$@"
+# Run only when executed: tests source this file to call its functions.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  set -euo pipefail
+  main "$@"
+fi
